@@ -3,8 +3,8 @@
     "paths": {
         "video_input": "./videos",
         "output_dir": "./output",
-        "ffmpeg_path": "./ffmpeg/ffmpeg.exe",
-        "ffprobe_path": "./ffmpeg/ffprobe.exe",
+        "ffmpeg_path": "C:\\Users\\liket\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\app\\ffmpeg\\ffmpeg.exe",
+        "ffprobe_path": "C:\\Users\\liket\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\app\\ffmpeg\\ffprobe.exe",
         "python_path": ""
     },
     "ocr": {

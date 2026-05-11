@@ -27,13 +27,9 @@ git clone https://github.com/XUNNV/AVT_subtitle_processor.git
 cd AVT_subtitle_processor
 ```
 
-### 2. 下载 FFmpeg
+### 2. 配置 FFmpeg
 
-由于 FFmpeg 文件过大（超过 GitHub 100MB 限制），请单独下载：
-
-1. 访问 https://www.gyunwa.com/2024/ffmpeg.html 或 https://www.gyang.com/ffmpeg.html
-2. 下载 `ffmpeg-latest.7z` 或 `ffmpeg-master-latest-win64-gpl.zip`
-3. 解压后，将 `ffmpeg.exe`、`ffprobe.exe`、`ffplay.exe` 复制到项目根目录的 `ffmpeg/` 文件夹
+程序使用系统自带的 FFmpeg，配置文件中已预设路径。如需自定义，可在 `config.json` 中修改 `paths.ffmpeg_path` 和 `paths.ffprobe_path`。
 
 ### 3. 安装 PaddleOCR GPU 环境
 
