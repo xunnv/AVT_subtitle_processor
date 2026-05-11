@@ -23,11 +23,19 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/你的用户名/avt_subtitle_processor.git
-cd avt_subtitle_processor
+git clone https://github.com/XUNNV/AVT_subtitle_processor.git
+cd AVT_subtitle_processor
 ```
 
-### 2. 安装 PaddleOCR GPU 环境
+### 2. 下载 FFmpeg
+
+由于 FFmpeg 文件过大（超过 GitHub 100MB 限制），请单独下载：
+
+1. 访问 https://www.gyunwa.com/2024/ffmpeg.html 或 https://www.gyang.com/ffmpeg.html
+2. 下载 `ffmpeg-latest.7z` 或 `ffmpeg-master-latest-win64-gpl.zip`
+3. 解压后，将 `ffmpeg.exe`、`ffprobe.exe`、`ffplay.exe` 复制到项目根目录的 `ffmpeg/` 文件夹
+
+### 3. 安装 PaddleOCR GPU 环境
 
 ```bash
 # 创建虚拟环境
@@ -38,7 +46,7 @@ paddleocr_env\Scripts\activate
 pip install paddlepaddle-gpu paddleocr PyQt5 requests
 ```
 
-### 3. 安装 Ollama 并下载翻译模型
+### 4. 安装 Ollama 并下载翻译模型
 
 ```bash
 # 安装 Ollama: https://ollama.ai
@@ -47,7 +55,7 @@ pip install paddlepaddle-gpu paddleocr PyQt5 requests
 ollama pull quantumcookie/sakura-galtransl-v3.7:7b
 ```
 
-### 4. 配置
+### 5. 配置
 
 ```bash
 # 复制配置模板
@@ -56,15 +64,7 @@ copy config\config.example.json config\config.json
 # 编辑 config.json，设置 PaddleOCR 环境路径
 ```
 
-### 5. 运行程序
-
-```bash
-# 设置环境变量并运行
-set PADDLEOCR_VENV=你的paddleocr环境路径
-paddleocr_env\Scripts\python.exe main.py
-```
-
-或者使用 `run.bat`:
+### 6. 运行程序
 
 ```bash
 # 编辑 run.bat，设置正确的路径
@@ -74,10 +74,11 @@ run.bat
 ## 项目结构
 
 ```
-avt_subtitle_processor/
+AVT_subtitle_processor/
 ├── main.py                 # 程序入口
 ├── run.bat                 # 启动脚本
 ├── requirements.txt        # 依赖列表
+├── ffmpeg/                 # FFmpeg 工具（需单独下载）
 ├── modules/
 │   ├── config_manager.py   # 配置管理
 │   ├── video_manager.py    # 视频管理
@@ -89,7 +90,6 @@ avt_subtitle_processor/
 │   └── translator.py       # 翻译模块
 ├── config/
 │   └── config.example.json # 配置模板
-├── ffmpeg/                 # FFmpeg 工具
 └── videos/                 # 视频输入目录
 ```
 
@@ -123,7 +123,7 @@ MIT License
 
 ## 版本历史
 
-### v1.0.0 (2025-05-08)
+### v1.0.0 (2025-05-10)
 - 初始版本发布
 - 支持日语字幕提取、翻译、烧录
 - PyQt5 图形界面

@@ -58,3 +58,6 @@ Thumbs.db
 *.toc
 base_library.zip
 localpycs/
+
+# Large binaries (download separately)
+ffmpeg/
