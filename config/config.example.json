@@ -1,0 +1,70 @@
+{
+    "version": "1.0.0",
+    "paths": {
+        "video_input": "./videos",
+        "output_dir": "./output",
+        "ffmpeg_path": "./ffmpeg/ffmpeg.exe",
+        "ffprobe_path": "./ffmpeg/ffprobe.exe",
+        "python_path": ""
+    },
+    "ocr": {
+        "lang": "japan",
+        "use_gpu": true,
+        "enable_mkldnn": false,
+        "det_db_thresh": 0.3,
+        "det_db_box_thresh": 0.5,
+        "rec_score_thresh": 0.5,
+        "frame_interval": 1,
+        "frame_quality": 2
+    },
+    "subtitle": {
+        "min_length": 2,
+        "max_gap": 3.0,
+        "max_duration": 30.0,
+        "similarity_threshold": 0.8
+    },
+    "translation": {
+        "framework": "ollama",
+        "ollama": {
+            "host": "http://localhost:11434",
+            "model": "quantumcookie/sakura-galtransl-v3.7:7b",
+            "timeout": 120,
+            "max_retries": 3,
+            "temperature": 0.3
+        },
+        "lmstudio": {
+            "host": "http://localhost:1234/v1",
+            "model": "sakura-galtransl-v3.7",
+            "timeout": 120,
+            "max_retries": 3,
+            "temperature": 0.3
+        }
+    },
+    "ass_style": {
+        "font_name": "Microsoft YaHei",
+        "font_size": 25,
+        "primary_color": "&H00FFFFFF",
+        "outline_color": "&H00000000",
+        "outline_width": 2,
+        "shadow": 1,
+        "margin_v": 30
+    },
+    "burn": {
+        "preset": "p4",
+        "crf": 23
+    },
+    "processing": {
+        "auto_skip_processed": true,
+        "wait_between_videos": 60,
+        "cleanup_temp": true
+    },
+    "ui": {
+        "theme": "default",
+        "font_size": 27,
+        "log_font_size": 27,
+        "log_max_lines": 1000,
+        "progress_update_interval": 1000,
+        "window_width": 1200,
+        "window_height": 800
+    }
+}
