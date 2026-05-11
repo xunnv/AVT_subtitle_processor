@@ -51,6 +51,9 @@ config/config.json
 .DS_Store
 Thumbs.db
 
+# Local scripts
+start_hidden.bat
+
 # PyInstaller
 *.spec
 *.pyz

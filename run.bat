@@ -4,10 +4,15 @@ title AVT Subtitle Processor
 
 cd /d "%~dp0"
 
-REM 设置 PaddleOCR 环境路径
-REM 请根据实际情况修改此路径
 if "%PADDLEOCR_VENV%"=="" (
-    set PADDLEOCR_VENV=D:\Software\PaddleOCR_gpu\venv
+    if exist "D:\Software\PaddleOCR_gpu\venv\Scripts\python.exe" (
+        set PADDLEOCR_VENV=D:\Software\PaddleOCR_gpu\venv
+    ) else (
+        echo Error: PaddleOCR environment not found.
+        echo Please set PADDLEOCR_VENV environment variable or install PaddleOCR GPU environment.
+        pause
+        exit /b 1
+    )
 )
 
 echo Starting application...
