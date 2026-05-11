@@ -223,10 +223,10 @@ class SubtitleEngine:
                 self._generate_ass(subtitles, ass_path, video_info)
 
             self._report_progress(6, 6, 0, "正在烧录字幕...")
-            success = self._burn_subtitles(video_path, ass_path, output_video)
+            success, error_detail = self._burn_subtitles(video_path, ass_path, output_video)
 
             if not success:
-                return ProcessResult(False, "字幕烧录失败")
+                return ProcessResult(False, f"字幕烧录失败: {error_detail}")
 
             if self.config.get('processing.cleanup_temp', True):
                 shutil.rmtree(work_dir)
@@ -291,8 +291,8 @@ class SubtitleEngine:
         cmd = [ffprobe, "-v", "quiet", "-print_format", "json",
                "-show_format", "-show_streams", video_path]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=30)
+        if result.returncode != 0 or not result.stdout:
             return {"duration": 0, "width": 1920, "height": 1080, "fps": 30.0, "fps_str": "30000/1001"}
 
         info = json.loads(result.stdout)
@@ -580,8 +580,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         with open(output_path, "w", encoding="utf-8-sig") as f:
             f.write(ass_content)
 
-    def _burn_subtitles(self, video_path: str, ass_path: str, output_path: str) -> bool:
-        """烧录字幕到视频"""
+    def _burn_subtitles(self, video_path: str, ass_path: str, output_path: str) -> tuple[bool, str]:
+        """烧录字幕到视频，返回 (成功, 错误信息)"""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -590,7 +590,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         test_cmd = [ffmpeg, "-hide_banner", "-encoders"]
         try:
-            result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(test_cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=10)
             has_nvenc = "h264_nvenc" in result.stdout
         except Exception as e:
             logger.warning(f"检测NVENC失败: {e}，使用libx264")
@@ -609,14 +609,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         print(f"[DEBUG] 输出路径: {output_path_abs}")
         
         if not os.path.exists(video_path_abs):
-            logger.error(f"视频文件不存在: {video_path_abs}")
-            print(f"[ERROR] 视频文件不存在: {video_path_abs}")
-            return False
+            error_msg = f"视频文件不存在: {video_path_abs}"
+            logger.error(error_msg)
+            print(f"[ERROR] {error_msg}")
+            return False, error_msg
             
         if not os.path.exists(ass_path_abs):
-            logger.error(f"ASS字幕文件不存在: {ass_path_abs}")
-            print(f"[ERROR] ASS字幕文件不存在: {ass_path_abs}")
-            return False
+            error_msg = f"ASS字幕文件不存在: {ass_path_abs}"
+            logger.error(error_msg)
+            print(f"[ERROR] {error_msg}")
+            return False, error_msg
 
         output_dir = os.path.dirname(output_path_abs)
         if not os.path.exists(output_dir):
@@ -624,13 +626,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 os.makedirs(output_dir)
                 logger.info(f"创建输出目录: {output_dir}")
             except Exception as e:
-                logger.error(f"创建输出目录失败: {e}")
-                return False
+                error_msg = f"创建输出目录失败: {e}"
+                logger.error(error_msg)
+                return False, error_msg
 
-        ass_escaped = ass_path_abs.replace("\\", "/").replace(":", "\\\\:")
+        temp_ass = None
+        temp_video = None
+        try:
+            temp_dir = os.path.join(os.path.dirname(output_path_abs), "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            temp_ass = os.path.join(temp_dir, "temp_sub.ass")
+            import shutil
+            shutil.copy2(ass_path_abs, temp_ass)
+            
+            temp_video = os.path.join(temp_dir, "temp_video.mp4")
+            shutil.copy2(video_path_abs, temp_video)
+            
+            ass_escaped = temp_ass.replace("\\", "/")
+            if ass_escaped[1:2] == ":":
+                ass_escaped = ass_escaped[0] + "\\\\:" + ass_escaped[2:]
+        except Exception as e:
+            logger.warning(f"创建临时文件失败: {e}，尝试直接使用")
+            ass_escaped = ass_path_abs.replace("\\", "/")
+            if ass_escaped[1:2] == ":":
+                ass_escaped = ass_escaped[0] + "\\\\:" + ass_escaped[2:]
+            temp_video = video_path_abs
 
         if has_nvenc:
-            cmd = [ffmpeg, "-y", "-i", video_path_abs,
+            cmd = [ffmpeg, "-y", "-i", temp_video,
                    "-vf", f"ass={ass_escaped}",
                    "-c:v", "h264_nvenc",
                    "-preset", burn_config.get('preset', 'p4'),
@@ -640,7 +664,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                    output_path_abs]
             logger.info(f"使用NVENC编码器烧录字幕")
         else:
-            cmd = [ffmpeg, "-y", "-i", video_path_abs,
+            cmd = [ffmpeg, "-y", "-i", temp_video,
                    "-vf", f"ass={ass_escaped}",
                    "-c:v", "libx264",
                    "-preset", "medium",
@@ -653,20 +677,48 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         print(f"[DEBUG] FFmpeg命令: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=7200)
             print(f"[DEBUG] FFmpeg返回码: {result.returncode}")
             if result.returncode != 0:
-                error_msg = result.stderr if result.stderr else "字幕烧录失败"
+                error_msg = result.stderr if result.stderr else "未知错误"
                 logger.error(f"FFmpeg 烧录错误: {error_msg}")
                 print(f"[ERROR] FFmpeg错误: {error_msg}")
+                for f in [temp_ass, temp_video]:
+                    if f and f != video_path_abs and os.path.exists(f):
+                        try:
+                            os.remove(f)
+                        except:
+                            pass
                 if result.stdout:
                     logger.error(f"FFmpeg 输出: {result.stdout}")
                     print(f"[DEBUG] FFmpeg输出: {result.stdout}")
-                return False
-            return os.path.exists(output_path_abs)
+                return False, error_msg[:200]
+            for f in [temp_ass, temp_video]:
+                if f and f != video_path_abs and os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+            if not os.path.exists(output_path_abs):
+                return False, "输出文件未创建"
+            return True, ""
         except subprocess.TimeoutExpired:
-            logger.error("字幕烧录超时（2小时）")
-            return False
+            for f in [temp_ass, temp_video]:
+                if f and f != video_path_abs and os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+            error_msg = "字幕烧录超时（2小时）"
+            logger.error(error_msg)
+            return False, error_msg
         except Exception as e:
-            logger.error(f"字幕烧录异常: {e}")
-            return False
+            for f in [temp_ass, temp_video]:
+                if f and f != video_path_abs and os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+            error_msg = f"字幕烧录异常: {e}"
+            logger.error(error_msg)
+            return False, error_msg

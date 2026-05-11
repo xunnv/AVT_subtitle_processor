@@ -1,2 +1,0 @@
-@echo off
-powershell -WindowStyle Hidden -Command "Start-Process -FilePath 'D:\Software\PaddleOCR_gpu\venv\Scripts\python.exe' -ArgumentList 'D:\Users\liket\Desktop\GitHub\avt_subtitle_processor\main.py' -WindowStyle Hidden"
