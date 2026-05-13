@@ -64,3 +64,6 @@ localpycs/
 
 # Large binaries (download separately)
 ffmpeg/
+
+# AI Agent Working Directory
+.trae/

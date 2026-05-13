@@ -5,7 +5,7 @@
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QPushButton, QCheckBox, QLabel, QGroupBox)
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QMutex
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QMutex, QTimer
 from PyQt5.QtGui import QTextCharFormat, QColor, QFont, QTextCursor
 from datetime import datetime
 import threading
@@ -31,6 +31,13 @@ class LogViewer(QWidget):
         self.emitter = LogEmitter()
         self.emitter.log_signal.connect(self.append_log)
         self.log_font_size = 27
+        
+        self._log_buffer = []
+        self._html_cache = ""
+        self._update_timer = QTimer()
+        self._update_timer.timeout.connect(self._flush_buffer)
+        self._update_timer.setInterval(100)
+        
         self.init_ui()
 
     def init_ui(self):
@@ -50,13 +57,13 @@ class LogViewer(QWidget):
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                border: 1.5px solid #b0b8e0;
-                background: white;
+                border: 1.5px solid #4d4d6c;
+                background: #1a1a2e;
             }
             QCheckBox::indicator:checked {
-                background: #5566cc;
+                background: #7c6fdc;
                 image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEgNUw0LjUgOSA1MSIvPjwvc3ZnPg==);
-                border-color: #4455bb;
+                border-color: #9d8fdf;
             }
         """)
         self.chk_show_info.stateChanged.connect(self._on_filter_changed)
@@ -68,12 +75,12 @@ class LogViewer(QWidget):
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                border: 1.5px solid #b0b8e0;
-                background: white;
+                border: 1.5px solid #4d4d6c;
+                background: #1a1a2e;
             }
             QCheckBox::indicator:checked {
-                background: #ff9900;
-                border-color: #dd8800;
+                background: #ffc107;
+                border-color: #ffca28;
             }
         """)
         self.chk_show_warning.stateChanged.connect(self._on_filter_changed)
@@ -85,12 +92,12 @@ class LogViewer(QWidget):
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                border: 1.5px solid #b0b8e0;
-                background: white;
+                border: 1.5px solid #4d4d6c;
+                background: #1a1a2e;
             }
             QCheckBox::indicator:checked {
-                background: #dd4444;
-                border-color: #cc3333;
+                background: #ff5252;
+                border-color: #ff7043;
             }
         """)
         self.chk_show_error.stateChanged.connect(self._on_filter_changed)
@@ -102,12 +109,12 @@ class LogViewer(QWidget):
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                border: 1.5px solid #b0b8e0;
-                background: white;
+                border: 1.5px solid #4d4d6c;
+                background: #1a1a2e;
             }
             QCheckBox::indicator:checked {
-                background: #33aa55;
-                border-color: #228844;
+                background: #69f0ae;
+                border-color: #69f0ae;
             }
         """)
         self.chk_show_success.stateChanged.connect(self._on_filter_changed)
@@ -158,51 +165,88 @@ class LogViewer(QWidget):
         """过滤条件改变"""
         pass
 
+    def _generate_html(self, message: str, level: str) -> str:
+        """生成日志HTML"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        if level == self.INFO:
+            color = "#c0c0c0"
+            prefix = "[INFO]"
+        elif level == self.WARNING:
+            color = "#ffc107"
+            prefix = "[WARN]"
+        elif level == self.ERROR:
+            color = "#ff5252"
+            prefix = "[ERROR]"
+        elif level == self.SUCCESS:
+            color = "#69f0ae"
+            prefix = "[OK]"
+        else:
+            color = "#c0c0c0"
+            prefix = ""
+        
+        return f'<span style="color: #606060;">[{timestamp}]</span> <span style="color: {color};">{prefix} {message}</span>'
+
     def append_log(self, message: str, level: str = INFO):
-        """追加日志"""
+        """追加日志（批量缓冲）"""
         self.mutex.lock()
-
+        
         try:
-            timestamp = datetime.now().strftime("%H:%M:%S")
+            html = self._generate_html(message, level)
+            self._log_buffer.append(html)
+            
+            if not self._update_timer.isActive():
+                self._update_timer.start()
+        finally:
+            self.mutex.unlock()
 
-            if level == self.INFO:
-                color = "#000000"
-                prefix = "[INFO]"
-            elif level == self.WARNING:
-                color = "#FFA500"
-                prefix = "[WARN]"
-            elif level == self.ERROR:
-                color = "#FF0000"
-                prefix = "[ERROR]"
-            elif level == self.SUCCESS:
-                color = "#008000"
-                prefix = "[OK]"
-            else:
-                color = "#000000"
-                prefix = ""
-
-            html = f'<span style="color: #888;">[{timestamp}]</span> <span style="color: {color};">{prefix} {message}</span>'
-
+    def _flush_buffer(self):
+        """批量刷新日志缓冲区"""
+        self.mutex.lock()
+        
+        try:
+            if not self._log_buffer:
+                self._update_timer.stop()
+                return
+            
+            buffer_to_flush = self._log_buffer
+            self._log_buffer = []
+            
+            if not buffer_to_flush:
+                return
+            
+            html_batch = "<br>".join(buffer_to_flush) + "<br>"
+            
             cursor = self.log_text.textCursor()
             cursor.movePosition(QTextCursor.End)
-            cursor.insertHtml(html + "<br>")
-
+            cursor.insertHtml(html_batch)
+            
             if self.chk_auto_scroll.isChecked():
                 scrollbar = self.log_text.verticalScrollBar()
                 scrollbar.setValue(scrollbar.maximum())
-
+            
             lines = self.log_text.document().blockCount()
             self.line_count_label.setText(f"行数: {lines}")
-
+            
             if lines > self.max_lines:
                 self._trim_lines()
-
+                
         finally:
             self.mutex.unlock()
 
     def log(self, message: str, level: str = INFO):
         """添加日志（线程安全）"""
         self.emitter.log_signal.emit(message, level)
+
+    def log_error(self, message: str):
+        """添加错误日志并立即刷新"""
+        self.log(message, self.ERROR)
+        self._flush_buffer()
+    
+    def log_success(self, message: str):
+        """添加成功日志并立即刷新"""
+        self.log(message, self.SUCCESS)
+        self._flush_buffer()
 
     def info(self, message: str):
         """添加信息日志"""

@@ -382,7 +382,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(self.spin_crf, 1, 1)
 
         note = QLabel("提示: CRF值越低质量越好，文件越大")
-        note.setStyleSheet("color: gray; font-size: 10px;")
+        note.setStyleSheet("color: #808080; font-size: 10px;")
         layout.addWidget(note, 2, 0, 1, 2)
 
         group.setLayout(layout)

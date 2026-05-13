@@ -376,6 +376,10 @@ class SubtitleEngine:
         raw_subtitles = []
         interval = self.config.get('ocr.frame_interval', 1)
         min_length = self.config.get('subtitle.min_length', 2)
+        score_threshold = ocr_config.get('rec_score_thresh', 0.5)
+        clean_pattern = re.compile(r'[\s\d\.\-\:\,\;\!\?\(\)\[\]\/\\]+')
+
+        total_frames = len(frames)
 
         for i, frame_path in enumerate(frames):
             if self.cancel_requested:
@@ -391,8 +395,8 @@ class SubtitleEngine:
                     for line in result[0]:
                         text = line[1][0]
                         score = line[1][1]
-                        if score >= ocr_config.get('rec_score_thresh', 0.5):
-                            cleaned = re.sub(r'[\s\d\.\-\:\,\;\!\?\(\)\[\]\/\\]+', '', text)
+                        if score >= score_threshold:
+                            cleaned = clean_pattern.sub('', text)
                             if len(cleaned) >= min_length:
                                 texts.append(text.strip())
 
@@ -403,8 +407,9 @@ class SubtitleEngine:
                             'texts': texts
                         })
 
-                progress = (i + 1) / len(frames) * 100
-                self._report_progress(2, 6, progress, f"OCR识别中... {i+1}/{len(frames)}")
+                if (i + 1) % 50 == 0 or (i + 1) == total_frames:
+                    progress = (i + 1) / total_frames * 100
+                    self._report_progress(2, 6, progress, f"OCR识别中... {i+1}/{total_frames}")
 
             except Exception:
                 continue
@@ -491,10 +496,13 @@ class SubtitleEngine:
             return subtitles
 
         batch_size = 10
-        for batch_start in range(0, total, batch_size):
+        num_batches = (total + batch_size - 1) // batch_size
+        
+        for batch_idx in range(0, num_batches):
             if self.cancel_requested:
                 break
 
+            batch_start = batch_idx * batch_size
             batch_end = min(batch_start + batch_size, total)
             batch = untranslated[batch_start:batch_end]
             texts = [sub.text for sub in batch]
@@ -505,8 +513,9 @@ class SubtitleEngine:
                 if trans:
                     sub.translation = trans
 
-            progress = batch_end / total * 100
-            self._report_progress(4, 6, progress, f"翻译中... {batch_end}/{total}")
+            if (batch_idx + 1) % 10 == 0 or batch_idx == num_batches - 1:
+                progress = batch_end / total * 100
+                self._report_progress(4, 6, progress, f"翻译中... {batch_end}/{total}")
 
         return subtitles
 
@@ -631,7 +640,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return False, error_msg
 
         temp_ass = None
-        temp_video = None
         try:
             temp_dir = os.path.join(os.path.dirname(output_path_abs), "temp")
             os.makedirs(temp_dir, exist_ok=True)
@@ -640,21 +648,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             import shutil
             shutil.copy2(ass_path_abs, temp_ass)
             
-            temp_video = os.path.join(temp_dir, "temp_video.mp4")
-            shutil.copy2(video_path_abs, temp_video)
-            
             ass_escaped = temp_ass.replace("\\", "/")
             if ass_escaped[1:2] == ":":
                 ass_escaped = ass_escaped[0] + "\\\\:" + ass_escaped[2:]
         except Exception as e:
-            logger.warning(f"创建临时文件失败: {e}，尝试直接使用")
+            logger.warning(f"创建临时字幕文件失败: {e}，尝试直接使用")
             ass_escaped = ass_path_abs.replace("\\", "/")
             if ass_escaped[1:2] == ":":
                 ass_escaped = ass_escaped[0] + "\\\\:" + ass_escaped[2:]
-            temp_video = video_path_abs
 
         if has_nvenc:
-            cmd = [ffmpeg, "-y", "-i", temp_video,
+            cmd = [ffmpeg, "-y", "-i", video_path_abs,
                    "-vf", f"ass={ass_escaped}",
                    "-c:v", "h264_nvenc",
                    "-preset", burn_config.get('preset', 'p4'),
@@ -664,7 +668,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                    output_path_abs]
             logger.info(f"使用NVENC编码器烧录字幕")
         else:
-            cmd = [ffmpeg, "-y", "-i", temp_video,
+            cmd = [ffmpeg, "-y", "-i", video_path_abs,
                    "-vf", f"ass={ass_escaped}",
                    "-c:v", "libx264",
                    "-preset", "medium",
@@ -683,22 +687,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 error_msg = result.stderr if result.stderr else "未知错误"
                 logger.error(f"FFmpeg 烧录错误: {error_msg}")
                 print(f"[ERROR] FFmpeg错误: {error_msg}")
-                for f in [temp_ass, temp_video]:
-                    if f and f != video_path_abs and os.path.exists(f):
-                        try:
-                            os.remove(f)
-                        except:
-                            pass
+                if temp_ass and os.path.exists(temp_ass):
+                    try:
+                        os.remove(temp_ass)
+                    except:
+                        pass
                 if result.stdout:
                     logger.error(f"FFmpeg 输出: {result.stdout}")
                     print(f"[DEBUG] FFmpeg输出: {result.stdout}")
                 return False, error_msg[:200]
-            for f in [temp_ass, temp_video]:
-                if f and f != video_path_abs and os.path.exists(f):
-                    try:
-                        os.remove(f)
-                    except:
-                        pass
+            if temp_ass and os.path.exists(temp_ass):
+                try:
+                    os.remove(temp_ass)
+                except:
+                    pass
             if not os.path.exists(output_path_abs):
                 return False, "输出文件未创建"
             return True, ""

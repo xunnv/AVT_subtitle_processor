@@ -14,6 +14,7 @@ class ProgressPanel(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setStyleSheet("background: #252536;")
         self.init_ui()
 
     def init_ui(self):
@@ -59,7 +60,7 @@ class ProgressPanel(QWidget):
         layout = QVBoxLayout()
 
         self.current_video_label = QLabel("无")
-        self.current_video_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        self.current_video_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #e0e0e0;")
 
         self.current_progress = QProgressBar()
         self.current_progress.setMinimum(0)
