@@ -640,8 +640,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return False, error_msg
 
         temp_ass = None
+        main_output_dir = self.config.get('paths.output_dir', '')
         try:
-            temp_dir = os.path.join(os.path.dirname(output_path_abs), "temp")
+            temp_dir_setting = self.config.get('processing.temp_dir', '')
+            if temp_dir_setting:
+                temp_dir = temp_dir_setting
+            else:
+                temp_dir = os.path.join(main_output_dir, "temp")
             os.makedirs(temp_dir, exist_ok=True)
             
             temp_ass = os.path.join(temp_dir, "temp_sub.ass")
@@ -705,22 +710,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return False, "输出文件未创建"
             return True, ""
         except subprocess.TimeoutExpired:
-            for f in [temp_ass, temp_video]:
-                if f and f != video_path_abs and os.path.exists(f):
-                    try:
-                        os.remove(f)
-                    except:
-                        pass
+            if temp_ass and os.path.exists(temp_ass):
+                try:
+                    os.remove(temp_ass)
+                except:
+                    pass
             error_msg = "字幕烧录超时（2小时）"
             logger.error(error_msg)
             return False, error_msg
         except Exception as e:
-            for f in [temp_ass, temp_video]:
-                if f and f != video_path_abs and os.path.exists(f):
-                    try:
-                        os.remove(f)
-                    except:
-                        pass
+            if temp_ass and os.path.exists(temp_ass):
+                try:
+                    os.remove(temp_ass)
+                except:
+                    pass
             error_msg = f"字幕烧录异常: {e}"
             logger.error(error_msg)
             return False, error_msg

@@ -85,7 +85,8 @@ class ConfigManager:
         "processing": {
             "auto_skip_processed": True,
             "wait_between_videos": 60,
-            "cleanup_temp": True
+            "cleanup_temp": True,
+            "temp_dir": ""
         },
         "ui": {
             "theme": "default",

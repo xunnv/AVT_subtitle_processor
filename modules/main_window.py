@@ -1131,6 +1131,12 @@ class MainWindow(QMainWindow):
 
     def _on_video_finished(self, success, message):
         """单个视频处理完成"""
+        # 确保最后一个进度更新被应用
+        if self._pending_progress:
+            step, total, progress, msg, eta = self._pending_progress
+            self._do_update_progress(step, total, progress, msg, eta)
+            self._pending_progress = None
+            
         videos = self.video_manager.get_videos()
         if self.current_video_index < len(videos):
             video = videos[self.current_video_index]

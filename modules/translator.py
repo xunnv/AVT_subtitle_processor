@@ -106,14 +106,6 @@ class OllamaTranslator(BaseTranslator):
         text = text.replace("'", "'").replace("'", "'")
         return text
 
-    def translate_batch(self, texts: List[str], source_lang: str = "ja", target_lang: str = "zh") -> List[Optional[str]]:
-        """批量翻译多个文本"""
-        results = []
-        for text in texts:
-            translated = self.translate(text, source_lang, target_lang)
-            results.append(translated)
-        return results
-
     def test_connection(self) -> tuple[bool, str]:
         """测试 Ollama 连接"""
         try:
