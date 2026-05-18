@@ -19,6 +19,18 @@ from datetime import timedelta
 from typing import List, Dict, Any, Callable, Optional
 from dataclasses import dataclass
 
+# 隐藏控制台窗口的配置
+def _get_subprocess_startupinfo():
+    """获取隐藏控制台窗口的 startupinfo（仅 Windows）"""
+    startupinfo = None
+    if sys.platform == 'win32':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
+
+_SUBPROCESS_STARTUPINFO = _get_subprocess_startupinfo()
+
 from .translator import TranslatorFactory
 
 
@@ -291,7 +303,7 @@ class SubtitleEngine:
         cmd = [ffprobe, "-v", "quiet", "-print_format", "json",
                "-show_format", "-show_streams", video_path]
 
-        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=30)
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=30, startupinfo=_SUBPROCESS_STARTUPINFO)
         if result.returncode != 0 or not result.stdout:
             return {"duration": 0, "width": 1920, "height": 1080, "fps": 30.0, "fps_str": "30000/1001"}
 
@@ -330,7 +342,7 @@ class SubtitleEngine:
         """检查 FFmpeg 是否可用"""
         ffmpeg = self.config.get('paths.ffmpeg_path', 'ffmpeg')
         try:
-            result = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True, timeout=10)
+            result = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True, timeout=10, startupinfo=_SUBPROCESS_STARTUPINFO)
             if result.returncode == 0:
                 return True, "FFmpeg 可用"
             return False, f"FFmpeg 运行失败"
@@ -350,7 +362,7 @@ class SubtitleEngine:
                "-q:v", str(quality),
                os.path.join(frames_dir, "frame_%06d.jpg")]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, startupinfo=_SUBPROCESS_STARTUPINFO)
         if result.returncode != 0:
             error_msg = result.stderr if result.stderr else "帧提取失败"
             raise RuntimeError(f"FFmpeg 错误: {error_msg}")
@@ -599,7 +611,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         test_cmd = [ffmpeg, "-hide_banner", "-encoders"]
         try:
-            result = subprocess.run(test_cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=10)
+            result = subprocess.run(test_cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=10, startupinfo=_SUBPROCESS_STARTUPINFO)
             has_nvenc = "h264_nvenc" in result.stdout
         except Exception as e:
             logger.warning(f"检测NVENC失败: {e}，使用libx264")
@@ -686,7 +698,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         print(f"[DEBUG] FFmpeg命令: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=7200)
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='ignore', timeout=7200, startupinfo=_SUBPROCESS_STARTUPINFO)
             print(f"[DEBUG] FFmpeg返回码: {result.returncode}")
             if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else "未知错误"

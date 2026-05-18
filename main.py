@@ -5,6 +5,16 @@ AVT字幕处理器 - 主程序入口
 import sys
 import os
 import traceback
+import ctypes
+
+# 在导入 PyQt5 之前隐藏控制台窗口（仅 Windows）
+if sys.platform == 'win32':
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+    hWnd = kernel32.GetConsoleWindow()
+    if hWnd:
+        user32.ShowWindow(hWnd, 0)
+
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont

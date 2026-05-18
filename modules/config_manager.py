@@ -10,18 +10,45 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 
+def get_base_dir():
+    """获取程序基础目录，兼容PyInstaller打包"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def get_config_dir():
     """获取配置目录，兼容PyInstaller打包"""
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-        config_dir = os.path.join(base_dir, "config")
-        os.makedirs(config_dir, exist_ok=True)
-        return config_dir
-    else:
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_dir = os.path.join(app_dir, "config")
-        os.makedirs(config_dir, exist_ok=True)
-        return config_dir
+    base_dir = get_base_dir()
+    config_dir = os.path.join(base_dir, "config")
+    os.makedirs(config_dir, exist_ok=True)
+    return config_dir
+
+
+def get_bin_dir():
+    """获取bin目录（存放FFmpeg等工具），兼容PyInstaller打包"""
+    base_dir = get_base_dir()
+    bin_dir = os.path.join(base_dir, "bin")
+    return bin_dir
+
+
+def get_ffmpeg_path():
+    """获取默认的 FFmpeg 路径，优先从 bin 目录查找"""
+    bin_dir = get_bin_dir()
+    ffmpeg_path = os.path.join(bin_dir, "ffmpeg.exe")
+    if os.path.exists(ffmpeg_path):
+        return ffmpeg_path
+    return "ffmpeg"
+
+
+def get_ffprobe_path():
+    """获取默认的 ffprobe 路径，优先从 bin 目录查找"""
+    bin_dir = get_bin_dir()
+    ffprobe_path = os.path.join(bin_dir, "ffprobe.exe")
+    if os.path.exists(ffprobe_path):
+        return ffprobe_path
+    return "ffprobe"
 
 
 class ConfigManager:
@@ -32,8 +59,8 @@ class ConfigManager:
         "paths": {
             "video_input": "./videos",
             "output_dir": "./output",
-            "ffmpeg_path": "C:\\Users\\liket\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\app\\ffmpeg\\ffmpeg.exe",
-            "ffprobe_path": "C:\\Users\\liket\\AppData\\Roaming\\TRAE SOLO CN\\ModularData\\ai-agent\\vm\\tools\\app\\ffmpeg\\ffprobe.exe",
+            "ffmpeg_path": "ffmpeg",
+            "ffprobe_path": "ffprobe",
             "python_path": ""
         },
         "ocr": {
@@ -115,15 +142,37 @@ class ConfigManager:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     loaded_config = json.load(f)
                 self.config = self._merge_config(self.DEFAULT_CONFIG, loaded_config)
-                return True
             except Exception as e:
                 print(f"加载配置失败: {e}")
                 self.config = self.DEFAULT_CONFIG.copy()
-                return False
         else:
             self.config = self.DEFAULT_CONFIG.copy()
+        
+        # 自动设置 FFmpeg 路径（优先从 bin 目录查找）
+        self._auto_set_ffmpeg_paths()
+        
+        if not os.path.exists(self.config_file):
             self.save()
-            return True
+            
+        return True
+
+    def _auto_set_ffmpeg_paths(self):
+        """自动设置 FFmpeg 路径，优先从 bin 目录查找"""
+        bin_dir = get_bin_dir()
+        
+        # 处理 ffmpeg_path
+        ffmpeg_bin = os.path.join(bin_dir, "ffmpeg.exe")
+        if os.path.exists(ffmpeg_bin):
+            current_path = self.config.get("paths", {}).get("ffmpeg_path", "")
+            if not current_path or current_path == "ffmpeg":
+                self.config["paths"]["ffmpeg_path"] = ffmpeg_bin
+        
+        # 处理 ffprobe_path
+        ffprobe_bin = os.path.join(bin_dir, "ffprobe.exe")
+        if os.path.exists(ffprobe_bin):
+            current_path = self.config.get("paths", {}).get("ffprobe_path", "")
+            if not current_path or current_path == "ffprobe":
+                self.config["paths"]["ffprobe_path"] = ffprobe_bin
 
     def save(self) -> bool:
         """保存配置文件"""
@@ -211,4 +260,6 @@ class ConfigManager:
     def reset_to_default(self) -> bool:
         """重置为默认配置"""
         self.config = self.DEFAULT_CONFIG.copy()
+        self._auto_set_ffmpeg_paths()
         return self.save()
+

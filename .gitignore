@@ -64,6 +64,8 @@ localpycs/
 
 # Large binaries (download separately)
 ffmpeg/
+bin/ffmpeg.exe
+bin/ffprobe.exe
 
 # AI Agent Working Directory
 .trae/
