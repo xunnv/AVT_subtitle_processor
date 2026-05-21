@@ -6,6 +6,9 @@
 
 **基于 PyQt5 的全自动日语视频字幕提取、翻译与烧录工具**
 
+
+**项目地址：https://github.com/xunnv/AVT_subtitle_processor**
+
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d7.svg)](https://www.microsoft.com/windows)
