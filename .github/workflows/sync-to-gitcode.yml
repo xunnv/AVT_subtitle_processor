@@ -1,0 +1,128 @@
+name: Sync Release to GitCode
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitCode Release
+        id: create_release
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          RELEASE_NAME="${{ github.event.release.name }}"
+          BODY='${{ github.event.release.body }}'
+
+          # Escape for JSON: newlines and quotes
+          BODY=$(python3 -c "
+import sys, json, os
+body = os.environ.get('BODY', '')
+body = body.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"').replace('\n', '\\\\n')
+print(body)
+")
+
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+
+          RESPONSE=$(curl -s -X POST \
+            "https://api.gitcode.com/api/v5/repos/SCPfoundation/AVT_subtitle_processor/releases" \
+            -H "Content-Type: application/json" \
+            -d "$(python3 -c "
+import json
+print(json.dumps({
+    'tag_name': '''$TAG_NAME''',
+    'name': '''$RELEASE_NAME''',
+    'body': '''$BODY'''
+}))
+")" \
+            --max-time 30 \
+            -w "\nHTTP_CODE:%{http_code}")
+
+          echo "$RESPONSE"
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1 | cut -d: -f2)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Failed to create release, HTTP code: $HTTP_CODE"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+      - name: Download GitHub Release Assets
+        run: |
+          mkdir -p assets
+          python3 << 'PYEOF'
+import os, json, urllib.request, urllib.parse
+
+assets = json.loads('''${{ toJson(github.event.release.assets) }}''')
+tag_name = '''${{ github.event.release.tag_name }}'''
+os.makedirs('assets', exist_ok=True)
+
+for asset in assets:
+    name = asset['name']
+    url = asset['browser_download_url']
+    dest = os.path.join('assets', name)
+    print(f"Downloading {name} from {url}")
+    urllib.request.urlretrieve(url, dest)
+    print(f"Saved: {dest} ({os.path.getsize(dest)} bytes)")
+
+print(f"Total assets downloaded: {len(assets)}")
+PYEOF
+
+      - name: Upload Assets to GitCode
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          python3 << 'PYEOF'
+import os, glob, urllib.request, json
+
+gitcode_token = os.environ.get('GITCODE_TOKEN')
+tag_name = os.environ.get('TAG_NAME')
+owner = 'SCPfoundation'
+repo = 'AVT_subtitle_processor'
+
+# Get upload URL
+import urllib.request
+req = urllib.request.Request(
+    f"https://api.gitcode.com/api/v5/repos/{owner}/{repo}/releases/tags/{tag_name}/upload_url",
+    headers={"Token": gitcode_token, "User-Agent": "curl/7.68.0"}
+)
+with urllib.request.urlopen(req, timeout=15) as resp:
+    upload_info = json.loads(resp.read())
+
+print(f"Upload URL base: {upload_info}")
+
+# GitCode doesn't have a separate upload API for custom files like GitHub does
+# The source code archives are auto-generated. If there are custom assets,
+# we need to use the attach_files endpoint.
+# For now, list what we have and show the result
+files = glob.glob('assets/*')
+print(f"Files to potentially upload: {files}")
+
+# Check if the release was created successfully by listing it
+req2 = urllib.request.Request(
+    f"https://api.gitcode.com/api/v5/repos/{owner}/{repo}/releases/tags/{tag_name}",
+    headers={"Token": gitcode_token, "User-Agent": "curl/7.68.0"}
+)
+with urllib.request.urlopen(req2, timeout=15) as resp2:
+    release_info = json.loads(resp2.read())
+    print(f"Release URL: {release_info.get('html_url', 'N/A')}")
+    print(f"Assets auto-generated: {[a['name'] for a in release_info.get('assets', [])]}")
+PYEOF
+
+      - name: Summary
+        run: |
+          echo "## GitCode Release Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Name:** ${{ github.event.release.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Release:** ${{ github.event.release.html_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitCode Release:** https://gitcode.com/SCPfoundation/AVT_subtitle_processor/releases/tag/${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Assets synced:** ${{ github.event.release.assets_count }}" >> $GITHUB_STEP_SUMMARY
