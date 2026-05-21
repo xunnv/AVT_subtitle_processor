@@ -26,6 +26,8 @@ class VideoInfo:
     path: str
     name: str
     size: int
+    mtime: float = 0.0
+    ctime: float = 0.0
     duration: Optional[float] = None
     resolution: Optional[str] = None
     status: VideoStatus = VideoStatus.PENDING
@@ -100,7 +102,7 @@ class VideoManager:
         self.current_index: int = -1
         self._scan_directory()
 
-    def _scan_directory(self):
+    def _scan_directory(self, sort_by: str = 'name', reverse: bool = False):
         """扫描输入目录中的视频文件"""
         input_dir = self.config.get('paths.video_input', '')
         if not os.path.exists(input_dir):
@@ -115,21 +117,44 @@ class VideoManager:
                 full_path = os.path.join(input_dir, file)
                 video_files.append(full_path)
 
-        self.videos = [self._create_video_info(path) for path in sorted(video_files)]
+        videos = [self._create_video_info(path) for path in video_files]
+        self.videos = self._sort_videos(videos, sort_by, reverse)
+    
+    def _sort_videos(self, videos: list, sort_by: str = 'name', reverse: bool = False) -> list:
+        """排序视频列表"""
+        sort_key_map = {
+            'name': lambda v: v.name.lower(),
+            'size': lambda v: v.size,
+            'mtime': lambda v: v.mtime,
+            'ctime': lambda v: v.ctime
+        }
+        
+        sort_key = sort_key_map.get(sort_by, lambda v: v.name.lower())
+        return sorted(videos, key=sort_key, reverse=reverse)
+    
+    def sort_videos(self, sort_by: str = 'name', reverse: bool = False):
+        """排序现有视频列表"""
+        self.videos = self._sort_videos(self.videos, sort_by, reverse)
+    
+    def rescan(self, sort_by: str = 'name', reverse: bool = False):
+        """重新扫描目录"""
+        self._scan_directory(sort_by, reverse)
 
     def _create_video_info(self, path: str) -> VideoInfo:
         """创建视频信息对象"""
         name = os.path.basename(path)
         size = os.path.getsize(path)
+        stat = os.stat(path)
 
         video_info = VideoInfo(
             path=path,
             name=name,
             size=size,
+            mtime=stat.st_mtime,
+            ctime=stat.st_ctime,
             status=VideoStatus.PENDING
         )
 
-        # 检查是否已处理
         if self._is_processed(path):
             video_info.status = VideoStatus.COMPLETED
             video_info.progress = 100.0

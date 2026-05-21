@@ -6,8 +6,11 @@
 import time
 import requests
 import json
+import asyncio
+import aiohttp
 from typing import Optional, Dict, Any, List
 from abc import ABC, abstractmethod
+from .logger import logger
 
 
 class BaseTranslator(ABC):
@@ -64,27 +67,97 @@ class OllamaTranslator(BaseTranslator):
                     translated = result.get("response", "").strip()
                     translated = self._clean_response(translated)
                     if translated:
+                        logger.debug(f"Ollama翻译成功: {text[:30]}... -> {translated[:30]}...")
                         return translated
+                    else:
+                        logger.debug(f"Ollama返回空结果，重试中 ({attempt + 1}/{self.max_retries})")
+                else:
+                    logger.warning(f"Ollama请求失败，状态码: {response.status_code}，重试中 ({attempt + 1}/{self.max_retries})")
 
             except requests.exceptions.Timeout:
+                logger.warning(f"Ollama请求超时，重试中 ({attempt + 1}/{self.max_retries})")
                 continue
             except requests.exceptions.ConnectionError:
+                logger.error(f"Ollama连接失败，请检查服务是否正常运行")
                 break
-            except Exception:
+            except json.JSONDecodeError:
+                logger.error(f"Ollama返回无效JSON响应")
+                continue
+            except Exception as e:
+                logger.exception(f"Ollama翻译异常: {e}")
                 continue
 
             if attempt < self.max_retries - 1:
                 time.sleep(2)
 
+        logger.warning(f"Ollama翻译失败，已达到最大重试次数 ({self.max_retries})")
         return None
 
     def translate_batch(self, texts: List[str], source_lang: str = "ja", target_lang: str = "zh") -> List[Optional[str]]:
-        """批量翻译多个文本"""
-        results = []
-        for text in texts:
-            translated = self.translate(text, source_lang, target_lang)
-            results.append(translated)
+        """批量翻译多个文本（使用异步并发）"""
+        if not texts:
+            return []
+        
+        logger.info(f"开始批量翻译 {len(texts)} 条文本")
+        start_time = time.time()
+        
+        try:
+            results = asyncio.run(self._async_translate_batch(texts, source_lang, target_lang))
+        except Exception as e:
+            logger.exception(f"批量翻译异步执行失败: {e}")
+            results = [self.translate(t, source_lang, target_lang) for t in texts]
+        
+        elapsed = time.time() - start_time
+        success_count = sum(1 for r in results if r is not None)
+        logger.info(f"批量翻译完成: {success_count}/{len(texts)} 成功，耗时 {elapsed:.2f} 秒")
+        
         return results
+    
+    async def _async_translate_batch(self, texts: List[str], source_lang: str, target_lang: str) -> List[Optional[str]]:
+        """异步批量翻译"""
+        semaphore = asyncio.Semaphore(3)
+        
+        async def translate_with_limit(text: str, index: int):
+            async with semaphore:
+                for attempt in range(self.max_retries):
+                    try:
+                        prompt = self._build_prompt(text, source_lang, target_lang)
+                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                            async with session.post(
+                                self.api_base,
+                                json={
+                                    "model": self.model,
+                                    "prompt": prompt,
+                                    "stream": False,
+                                    "options": {
+                                        "temperature": self.temperature,
+                                        "num_predict": 512
+                                    }
+                                }
+                            ) as response:
+                                if response.status == 200:
+                                    result = await response.json()
+                                    translated = result.get("response", "").strip()
+                                    translated = self._clean_response(translated)
+                                    if translated:
+                                        return index, translated
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(1)
+                    except Exception:
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(2)
+                            continue
+                        return index, None
+                return index, None
+        
+        tasks = [translate_with_limit(text, i) for i, text in enumerate(texts)]
+        results = await asyncio.gather(*tasks)
+        
+        sorted_results = [None] * len(texts)
+        for index, translated in results:
+            sorted_results[index] = translated
+        
+        return sorted_results
 
     def _build_prompt(self, text: str, source_lang: str, target_lang: str) -> str:
         """构建翻译提示词"""
@@ -156,27 +229,96 @@ class LMStudioTranslator(BaseTranslator):
                     translated = result.get("choices", [{}])[0].get("text", "").strip()
                     translated = self._clean_response(translated)
                     if translated:
+                        logger.debug(f"LM Studio翻译成功: {text[:30]}... -> {translated[:30]}...")
                         return translated
+                    else:
+                        logger.debug(f"LM Studio返回空结果，重试中 ({attempt + 1}/{self.max_retries})")
+                else:
+                    logger.warning(f"LM Studio请求失败，状态码: {response.status_code}，重试中 ({attempt + 1}/{self.max_retries})")
 
             except requests.exceptions.Timeout:
+                logger.warning(f"LM Studio请求超时，重试中 ({attempt + 1}/{self.max_retries})")
                 continue
             except requests.exceptions.ConnectionError:
+                logger.error(f"LM Studio连接失败，请检查服务是否正常运行")
                 break
-            except Exception:
+            except json.JSONDecodeError:
+                logger.error(f"LM Studio返回无效JSON响应")
+                continue
+            except Exception as e:
+                logger.exception(f"LM Studio翻译异常: {e}")
                 continue
 
             if attempt < self.max_retries - 1:
                 time.sleep(2)
 
+        logger.warning(f"LM Studio翻译失败，已达到最大重试次数 ({self.max_retries})")
         return None
 
     def translate_batch(self, texts: List[str], source_lang: str = "ja", target_lang: str = "zh") -> List[Optional[str]]:
-        """批量翻译多个文本"""
-        results = []
-        for text in texts:
-            translated = self.translate(text, source_lang, target_lang)
-            results.append(translated)
+        """批量翻译多个文本（使用异步并发）"""
+        if not texts:
+            return []
+        
+        logger.info(f"开始批量翻译 {len(texts)} 条文本")
+        start_time = time.time()
+        
+        try:
+            results = asyncio.run(self._async_translate_batch(texts, source_lang, target_lang))
+        except Exception as e:
+            logger.exception(f"批量翻译异步执行失败: {e}")
+            results = [self.translate(t, source_lang, target_lang) for t in texts]
+        
+        elapsed = time.time() - start_time
+        success_count = sum(1 for r in results if r is not None)
+        logger.info(f"批量翻译完成: {success_count}/{len(texts)} 成功，耗时 {elapsed:.2f} 秒")
+        
         return results
+    
+    async def _async_translate_batch(self, texts: List[str], source_lang: str, target_lang: str) -> List[Optional[str]]:
+        """异步批量翻译"""
+        semaphore = asyncio.Semaphore(3)
+        
+        async def translate_with_limit(text: str, index: int):
+            async with semaphore:
+                for attempt in range(self.max_retries):
+                    try:
+                        prompt = self._build_prompt(text, source_lang, target_lang)
+                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                            async with session.post(
+                                self.api_base,
+                                json={
+                                    "model": self.model,
+                                    "prompt": prompt,
+                                    "max_tokens": 512,
+                                    "temperature": self.temperature,
+                                    "stream": False
+                                },
+                                headers={"Content-Type": "application/json"}
+                            ) as response:
+                                if response.status == 200:
+                                    result = await response.json()
+                                    translated = result.get("choices", [{}])[0].get("text", "").strip()
+                                    translated = self._clean_response(translated)
+                                    if translated:
+                                        return index, translated
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(1)
+                    except Exception:
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(2)
+                            continue
+                        return index, None
+                return index, None
+        
+        tasks = [translate_with_limit(text, i) for i, text in enumerate(texts)]
+        results = await asyncio.gather(*tasks)
+        
+        sorted_results = [None] * len(texts)
+        for index, translated in results:
+            sorted_results[index] = translated
+        
+        return sorted_results
 
     def _build_prompt(self, text: str, source_lang: str, target_lang: str) -> str:
         """构建翻译提示词"""

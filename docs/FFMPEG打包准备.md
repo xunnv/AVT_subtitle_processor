@@ -56,4 +56,3 @@ AVT_Subtitle_Processor/
 ```
 
 程序会自动从 `bin/` 目录读取 FFmpeg，用户无需手动配置！
-

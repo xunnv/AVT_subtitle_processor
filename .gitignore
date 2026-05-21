@@ -61,6 +61,8 @@ start_hidden.bat
 *.toc
 base_library.zip
 localpycs/
+build/
+dist/
 
 # Large binaries (download separately)
 ffmpeg/
@@ -69,3 +71,6 @@ bin/ffprobe.exe
 
 # AI Agent Working Directory
 .trae/
+
+# Release builds
+releases/

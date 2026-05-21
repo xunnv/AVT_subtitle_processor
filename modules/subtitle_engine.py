@@ -18,6 +18,8 @@ from pathlib import Path
 from datetime import timedelta
 from typing import List, Dict, Any, Callable, Optional
 from dataclasses import dataclass
+from .logger import logger
+from .security import PathSecurity
 
 # 隐藏控制台窗口的配置
 def _get_subprocess_startupinfo():
@@ -76,6 +78,7 @@ class SubtitleEngine:
         self.cancel_requested = False
         self.translator = None
         self._init_translator()
+        self._ocr_engine = None
 
     def _setup_cuda_dll(self):
         """配置CUDA DLL路径"""
@@ -122,13 +125,38 @@ class SubtitleEngine:
         framework = trans_config.get('framework', 'ollama')
         try:
             self.translator = TranslatorFactory.create(framework, trans_config)
+            logger.info(f"翻译器初始化成功: {framework}")
         except Exception as e:
-            print(f"翻译器初始化失败: {e}")
+            logger.error(f"翻译器初始化失败: {e}")
             self.translator = None
 
     def reload_translator(self):
         """重新加载翻译器"""
         self._init_translator()
+
+    def _get_ocr_engine(self):
+        """获取 OCR 引擎实例（单例模式，延迟初始化）"""
+        if self._ocr_engine is None:
+            from paddleocr import PaddleOCR
+            
+            ocr_config = self.config.get_ocr_config()
+            self._ocr_engine = PaddleOCR(
+                use_angle_cls=False,
+                lang=ocr_config.get('lang', 'japan'),
+                use_gpu=ocr_config.get('use_gpu', True),
+                enable_mkldnn=ocr_config.get('enable_mkldnn', False),
+                det_db_thresh=ocr_config.get('det_db_thresh', 0.3),
+                det_db_box_thresh=ocr_config.get('det_db_box_thresh', 0.5),
+                rec_score_thresh=ocr_config.get('rec_score_thresh', 0.5),
+                show_log=False
+            )
+        return self._ocr_engine
+
+    def reset_ocr_engine(self):
+        """重置 OCR 引擎（配置变更时调用）"""
+        if self._ocr_engine is not None:
+            del self._ocr_engine
+            self._ocr_engine = None
 
     def set_progress_callback(self, callback: Callable):
         """设置进度回调函数"""
@@ -148,28 +176,39 @@ class SubtitleEngine:
         """处理单个视频（支持断点续传）"""
         self.cancel_requested = False
         start_time = time.time()
+        video_name = Path(video_path).stem
+        
+        logger.info(f"开始处理视频: {video_path}")
 
         ffmpeg_ok, ffmpeg_msg = self._check_ffmpeg()
         if not ffmpeg_ok:
+            logger.error(f"FFmpeg 检查失败: {ffmpeg_msg}")
             return ProcessResult(False, f"FFmpeg 检查失败: {ffmpeg_msg}")
 
         if not self.translator:
             self.reload_translator()
             if not self.translator:
+                logger.error("翻译器未初始化")
                 return ProcessResult(False, "翻译器未初始化，请检查配置")
 
         try:
-            if not os.path.exists(video_path):
-                return ProcessResult(False, f"视频文件不存在: {video_path}")
-
+            valid, msg = PathSecurity.validate_video_file(video_path)
+            if not valid:
+                logger.error(f"视频文件验证失败: {msg}")
+                return ProcessResult(False, msg)
+            
             output_dir = self.config.get('paths.output_dir', '')
+            valid, msg = PathSecurity.validate_output_path(output_dir)
+            if not valid:
+                logger.error(f"输出目录验证失败: {msg}")
+                return ProcessResult(False, msg)
+
             video_hash = hashlib.md5(video_path.encode()).hexdigest()[:8]
             work_dir = os.path.join(output_dir, f"work_{video_hash}")
             frames_dir = os.path.join(work_dir, "frames")
             os.makedirs(frames_dir, exist_ok=True)
 
             video_info = self._get_video_info(video_path)
-            video_name = Path(video_path).stem
 
             subtitles_dir = os.path.join(output_dir, "subtitles")
             videos_dir = os.path.join(output_dir, "videos")
@@ -181,6 +220,7 @@ class SubtitleEngine:
             output_video = os.path.join(videos_dir, f"{video_name}_subtitled.mp4")
 
             if os.path.exists(output_video):
+                logger.info(f"检测到已完成的输出视频，跳过处理: {output_video}")
                 self._report_progress(6, 6, 100, f"检测到已完成的输出视频，跳过处理")
                 elapsed = time.time() - start_time
                 return ProcessResult(
@@ -195,55 +235,75 @@ class SubtitleEngine:
             self._report_progress(1, 6, 0, "正在提取视频帧...")
             frames = sorted(glob.glob(os.path.join(frames_dir, "*.jpg")))
             if frames:
+                logger.info(f"检测到已提取的帧({len(frames)}帧)，跳过帧提取")
                 self._report_progress(1, 6, 100, "检测到已提取的帧，跳过帧提取")
             else:
                 try:
                     frames = self._extract_frames(video_path, frames_dir)
+                    logger.info(f"帧提取完成，共提取 {len(frames)} 帧")
                 except RuntimeError as e:
+                    logger.error(f"帧提取失败: {e}")
                     return ProcessResult(False, str(e))
                 if not frames:
+                    logger.error("帧提取失败：未提取到任何帧")
                     return ProcessResult(False, "帧提取失败")
 
             self._report_progress(2, 6, 0, "正在进行OCR识别...")
             raw_subtitles = []
             if os.path.exists(srt_path):
+                logger.info(f"检测到已生成的SRT文件，跳过OCR和翻译")
                 self._report_progress(2, 6, 100, "检测到已生成的SRT文件，跳过OCR和翻译")
                 self._report_progress(3, 6, 100, "跳过字幕整理")
                 self._report_progress(4, 6, 100, "跳过翻译")
                 subtitles = self._load_subtitles_from_srt(srt_path)
             else:
                 raw_subtitles = self._ocr_recognize(frames)
+                logger.info(f"OCR识别完成，识别到 {len(raw_subtitles)} 条字幕")
                 if self.cancel_requested:
+                    logger.info("用户取消处理")
                     return ProcessResult(False, "用户取消")
                 if not raw_subtitles:
+                    logger.warning("未识别到字幕")
                     return ProcessResult(False, "未识别到字幕")
 
                 self._report_progress(3, 6, 50, "正在整理字幕...")
                 subtitles = self._organize_subtitles(raw_subtitles)
+                logger.info(f"字幕整理完成，共整理 {len(subtitles)} 条")
 
                 self._report_progress(4, 6, 0, "正在进行翻译...")
                 subtitles = self._translate_subtitles(subtitles)
+                logger.info(f"翻译完成，共翻译 {len(subtitles)} 条")
                 if self.cancel_requested:
+                    logger.info("用户取消处理")
                     return ProcessResult(False, "用户取消")
 
                 self._save_srt(subtitles, srt_path)
+                logger.info(f"SRT字幕已保存: {srt_path}")
 
             self._report_progress(5, 6, 0, "正在生成ASS字幕...")
             if os.path.exists(ass_path):
+                logger.info(f"检测到已生成的ASS文件，跳过ASS生成")
                 self._report_progress(5, 6, 100, "检测到已生成的ASS文件，跳过ASS生成")
             else:
                 self._generate_ass(subtitles, ass_path, video_info)
+                logger.info(f"ASS字幕已生成: {ass_path}")
 
             self._report_progress(6, 6, 0, "正在烧录字幕...")
             success, error_detail = self._burn_subtitles(video_path, ass_path, output_video)
 
             if not success:
+                logger.error(f"字幕烧录失败: {error_detail}")
                 return ProcessResult(False, f"字幕烧录失败: {error_detail}")
+            
+            logger.info(f"字幕烧录完成: {output_video}")
 
             if self.config.get('processing.cleanup_temp', True):
                 shutil.rmtree(work_dir)
+                logger.debug(f"临时目录已清理: {work_dir}")
 
             elapsed = time.time() - start_time
+            logger.info(f"视频处理完成: {video_name}，耗时 {elapsed:.2f} 秒")
+            
             return ProcessResult(
                 True,
                 f"处理完成，耗时 {elapsed:.0f} 秒",
@@ -258,6 +318,7 @@ class SubtitleEngine:
             )
 
         except Exception as e:
+            logger.exception(f"视频处理异常: {video_path}")
             return ProcessResult(False, f"处理异常: {str(e)}")
 
     def _load_subtitles_from_srt(self, srt_path: str) -> List[SubtitleItem]:
@@ -371,19 +432,8 @@ class SubtitleEngine:
 
     def _ocr_recognize(self, frames: List[str]) -> List[Dict]:
         """OCR识别字幕"""
-        from paddleocr import PaddleOCR
-
+        ocr = self._get_ocr_engine()
         ocr_config = self.config.get_ocr_config()
-        ocr = PaddleOCR(
-            use_angle_cls=False,
-            lang=ocr_config.get('lang', 'japan'),
-            use_gpu=ocr_config.get('use_gpu', True),
-            enable_mkldnn=ocr_config.get('enable_mkldnn', False),
-            det_db_thresh=ocr_config.get('det_db_thresh', 0.3),
-            det_db_box_thresh=ocr_config.get('det_db_box_thresh', 0.5),
-            rec_score_thresh=ocr_config.get('rec_score_thresh', 0.5),
-            show_log=False
-        )
 
         raw_subtitles = []
         interval = self.config.get('ocr.frame_interval', 1)
@@ -426,7 +476,6 @@ class SubtitleEngine:
             except Exception:
                 continue
 
-        del ocr
         return raw_subtitles
 
     def _text_similarity(self, t1: str, t2: str) -> float:
