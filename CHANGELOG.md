@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-05-23
+
+### Added
+
+- `启动.py`：智能启动脚本，自动检测虚拟环境（支持 `PADDLEOCR_VENV` 环境变量和默认路径降级）和 FFmpeg 工具
+- 环境缺失时显示详细的错误提示，列出具体缺失的依赖路径和解决方案
+- 启动脚本在检测到缺失依赖时调用 `input()` 暂停终端窗口，解决双击闪退问题
+
+### Changed
+
+- 启动入口从 `run.bat` + `start.py` 迁移为 `启动.py`（中文命名，NTFS 完全兼容）
+- `config_manager.py` 增强：`get_base_dir()` 支持 `sys._MEIPASS`（PyInstaller frozen 模式）
+- `subtitle_engine.py` 增强：`_resolve_tool_path()` 实现三级降级路径查找（`_MEIPASS` → `base_dir` → `base_dir/_internal`）
+- `README.md`：更新项目 URL、启动方式和安装指南
+
+### Removed
+
+- 删除冗余文件：`test_packaged.py`、`start.bat`、`start.py`
+- 清理 `modules/__pycache__/`、`build/` 目录中的缓存文件
+
 ## [1.1.0] - 2026-05-22
 
 ### Fixed

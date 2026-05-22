@@ -111,7 +111,7 @@ AVT 字幕处理器（Auto Video Translation）是一个功能强大的 Windows 
 ### 1. 获取源码
 
 ```bash
-git clone https://github.com/XUNNV/AVT_subtitle_processor.git
+git clone https://github.com/xunnv/AVT_subtitle_processor.git
 cd AVT_subtitle_processor
 ```
 
