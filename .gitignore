@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific
+output/
+0/
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Logs
+logs/
+*.log
+
+# Config with sensitive paths (keep template)
+config/config.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scripts
+start_hidden.bat
+
+# PyInstaller — 仅排除构建产物，保留 .spec 配置文件
+build/
+dist/
+*.pyz
+*.pkg
+*.toc
+base_library.zip
+localpycs/
+# AVT_Subtitle_Processor.spec — 保留（打包配置文件，需版本控制）
+
+# Large binaries (download separately)
+bin/ffmpeg.exe
+bin/ffprobe.exe
+
+# AI Agent Working Directory
+.trae/
+
+# Release builds
+releases/
+
+# Test artifacts
+.pytest_cache/
+tests/__pycache__/
