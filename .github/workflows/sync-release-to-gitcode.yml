@@ -1,0 +1,75 @@
+name: Sync Release to GitCode
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to sync (e.g. v2.0.0)'
+        required: false
+        default: ''
+
+env:
+  GITCODE_USER: SCPfoundation
+  GITCODE_REPO: AVT_subtitle_processor
+
+jobs:
+  sync-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag and release info
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "TAG=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "NAME=${{ github.event.release.name }}" >> "$GITHUB_OUTPUT"
+            echo "PRERELEASE=${{ github.event.release.prerelease }}" >> "$GITHUB_OUTPUT"
+            printf '%s\n' '${{ toJson(github.event.release.body) }}' | jq -r '.' > /tmp/release_body.txt
+          else
+            TAG="${{ inputs.tag }}"
+            [ -z "$TAG" ] && TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+            RELEASE_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+            echo "NAME=$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')" >> "$GITHUB_OUTPUT"
+            echo "PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease // false')" >> "$GITHUB_OUTPUT"
+            echo "$RELEASE_JSON" | jq -r '.body // ""' > /tmp/release_body.txt
+          fi
+
+      - name: Push code and tags to GitCode
+        run: |
+          git remote add gitcode https://${{ env.GITCODE_USER }}:${{ secrets.GITCODE_TOKEN }}@gitcode.com/${{ env.GITCODE_USER }}/${{ env.GITCODE_REPO }}.git
+          git push gitcode --all --force
+          git push gitcode --tags --force
+
+      - name: Create Release on GitCode
+        run: |
+          TAG="${{ steps.vars.outputs.TAG }}"
+          NAME="${{ steps.vars.outputs.NAME }}"
+          PRERELEASE="${{ steps.vars.outputs.PRERELEASE }}"
+          RAW_BODY=$(cat /tmp/release_body.txt)
+
+          PAYLOAD=$(jq -n \
+            --arg tag_name "$TAG" \
+            --arg name "$NAME" \
+            --arg body "$RAW_BODY" \
+            --argjson prerelease "$PRERELEASE" \
+            '{tag_name: $tag_name, name: $name, body: $body, prerelease: $prerelease}')
+
+          RESPONSE=$(curl -s --max-time 30 -X POST \
+            "https://gitcode.com/api/v5/repos/${{ env.GITCODE_USER }}/${{ env.GITCODE_REPO }}/releases" \
+            -H "Content-Type: application/json" \
+            -H "PRIVATE-TOKEN: ${{ secrets.GITCODE_TOKEN }}" \
+            -d "$PAYLOAD")
+
+          echo "Response: $RESPONSE"
+          if echo "$RESPONSE" | jq -e '.tag_name' > /dev/null 2>&1; then
+            echo "✓ Release $TAG created on GitCode"
+          else
+            echo "⚠ Release may already exist or creation failed (check response above)"
+          fi

@@ -1,0 +1,94 @@
+name: Pull Assets from GitCode
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+env:
+  GITCODE_USER: SCPfoundation
+  GITCODE_REPO: AVT_subtitle_processor
+
+permissions:
+  contents: write
+
+jobs:
+  pull-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch GitCode releases
+        id: gitcode
+        run: |
+          RELEASES=$(curl -s --max-time 30 \
+            "https://gitcode.com/api/v5/repos/${{ env.GITCODE_USER }}/${{ env.GITCODE_REPO }}/releases" \
+            -H "PRIVATE-TOKEN: ${{ secrets.GITCODE_TOKEN }}")
+          echo "GitCode releases:"
+          echo "$RELEASES" | jq -r '.[]? | "  \(.tag_name): \(.assets | length) assets"'
+          echo "$RELEASES" > /tmp/gitcode_releases.json
+
+      - name: Sync assets to GitHub
+        run: |
+          GITCODE_TOKEN="${{ secrets.GITCODE_TOKEN }}"
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          REPO="${{ github.repository }}"
+
+          cat /tmp/gitcode_releases.json | jq -c '.[]?' | while read -r release; do
+            TAG=$(echo "$release" | jq -r '.tag_name')
+            [ -z "$TAG" ] || [ "$TAG" = "null" ] && continue
+
+            echo ""
+            echo "=== Checking $TAG ==="
+
+            GH_RELEASE=$(curl -s --max-time 30 \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+            GH_RELEASE_ID=$(echo "$GH_RELEASE" | jq -r '.id')
+            if [ -z "$GH_RELEASE_ID" ] || [ "$GH_RELEASE_ID" = "null" ]; then
+              echo "  → GitHub has no release for $TAG, skipping"
+              continue
+            fi
+
+            GC_ASSETS=$(echo "$release" | jq -r '
+              .assets[]? |
+              select(.type != "source") |
+              "\(.name)|\(.browser_download_url)"
+            ')
+            if [ -z "$GC_ASSETS" ]; then
+              echo "  → No custom assets on GitCode, skipping"
+              continue
+            fi
+
+            GH_ASSET_NAMES=$(curl -s --max-time 30 \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/releases/$GH_RELEASE_ID/assets" \
+              | jq -r '.[].name')
+
+            echo "$GC_ASSETS" | while IFS='|' read -r name url; do
+              [ -z "$name" ] && continue
+              if echo "$GH_ASSET_NAMES" | grep -qxF "$name"; then
+                echo "  ✓ $name (already on GitHub)"
+                continue
+              fi
+              echo "  ↓ Downloading $name from GitCode..."
+              curl -sL --max-time 600 -o "/tmp/$name" "$url"
+              if [ ! -f "/tmp/$name" ]; then
+                echo "  ✗ Failed to download $name"
+                continue
+              fi
+              SIZE=$(stat -c%s "/tmp/$name" 2>/dev/null || echo 0)
+              echo "  ↑ Uploading $name (${SIZE} bytes) to GitHub..."
+              UPLOAD_RESPONSE=$(curl -s --max-time 600 -X POST \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Content-Type: application/octet-stream" \
+                -T "/tmp/$name" \
+                "https://uploads.github.com/repos/$REPO/releases/$GH_RELEASE_ID/assets?name=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$name'))")")
+              if echo "$UPLOAD_RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
+                echo "  ✓ $name synced to GitHub"
+              else
+                echo "  ✗ Upload failed: $(echo "$UPLOAD_RESPONSE" | head -c 200)"
+              fi
+              rm -f "/tmp/$name"
+            done
+          done
+          echo ""
+          echo "=== Sync complete ==="
