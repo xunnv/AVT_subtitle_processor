@@ -286,11 +286,20 @@ class SubtitleEngine:
             self._report_progress(2, 6, 0, "正在进行OCR识别...")
             raw_subtitles = []
             if os.path.exists(srt_path):
-                logger.info(f"检测到已生成的SRT文件，跳过OCR和翻译")
-                self._report_progress(2, 6, 100, "检测到已生成的SRT文件，跳过OCR和翻译")
+                logger.info(f"检测到已生成的SRT文件，跳过OCR和字幕整理")
+                self._report_progress(2, 6, 100, "检测到已生成的SRT文件")
                 self._report_progress(3, 6, 100, "跳过字幕整理")
-                self._report_progress(4, 6, 100, "跳过翻译")
                 subtitles = self._load_subtitles_from_srt(srt_path)
+                missing_translation = [sub for sub in subtitles if not sub.translation]
+                if missing_translation:
+                    logger.info(f"SRT中有 {len(missing_translation)}/{len(subtitles)} 条字幕缺少翻译，将重新翻译")
+                    self._report_progress(4, 6, 0, "正在补译缺失的字幕...")
+                    subtitles = self._translate_subtitles(subtitles)
+                    self._save_srt(subtitles, srt_path)
+                    logger.info(f"SRT文件已更新翻译: {srt_path}")
+                else:
+                    logger.info(f"SRT中所有字幕均有翻译，跳过翻译")
+                    self._report_progress(4, 6, 100, "跳过翻译（已有翻译）")
             else:
                 raw_subtitles = self._ocr_recognize(frames)
                 logger.info(f"OCR识别完成，识别到 {len(raw_subtitles)} 条字幕")
@@ -545,7 +554,9 @@ class SubtitleEngine:
             gap = item['timestamp'] - current_end
 
             if similarity >= threshold and gap <= max_gap:
-                current_text = item['texts']
+                for t in item['texts']:
+                    if t not in current_text:
+                        current_text.append(t)
                 current_end = item['timestamp'] + interval
             else:
                 merged.append(SubtitleItem(
@@ -593,6 +604,8 @@ class SubtitleEngine:
 
         batch_size = 10
         num_batches = (total + batch_size - 1) // batch_size
+        success_count = 0
+        failed_count = 0
         
         for batch_idx in range(0, num_batches):
             if self.cancel_requested:
@@ -608,10 +621,17 @@ class SubtitleEngine:
             for sub, trans in zip(batch, translations):
                 if trans:
                     sub.translation = trans
+                    success_count += 1
+                else:
+                    failed_count += 1
 
             if (batch_idx + 1) % 10 == 0 or batch_idx == num_batches - 1:
                 progress = batch_end / total * 100
                 self._report_progress(4, 6, progress, f"翻译中... {batch_end}/{total}")
+
+        logger.info(f"翻译统计: 成功 {success_count}/{total}，失败 {failed_count}/{total}")
+        if failed_count > 0:
+            logger.warning(f"有 {failed_count} 条字幕翻译失败，将在输出字幕中保留原文")
 
         return subtitles
 
