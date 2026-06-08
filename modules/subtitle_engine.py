@@ -692,12 +692,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             start = self._format_timestamp_ass(sub.start)
             end = self._format_timestamp_ass(sub.end)
 
-            text_line = sub.text.replace("\n", " ")
-            if sub.translation:
-                trans_line = sub.translation.replace("\n", " ")
-                ass_text = f"{text_line}\\N{trans_line}"
+            show_translation_only = self.config.get('subtitle.show_translation_only', False)
+            
+            if show_translation_only:
+                ass_text = sub.translation.replace("\n", " ") if sub.translation else sub.text.replace("\n", " ")
             else:
-                ass_text = text_line
+                text_line = sub.text.replace("\n", " ")
+                if sub.translation:
+                    trans_line = sub.translation.replace("\n", " ")
+                    ass_text = f"{text_line}\\N{trans_line}"
+                else:
+                    ass_text = text_line
 
             ass_text = ass_text.replace("{", "\\{").replace("}", "\\}")
             ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{ass_text}\n"

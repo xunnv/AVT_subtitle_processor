@@ -21,7 +21,8 @@
         "min_length": 2,
         "max_gap": 3.0,
         "max_duration": 30.0,
-        "similarity_threshold": 0.8
+        "similarity_threshold": 0.8,
+        "show_translation_only": false
     },
     "translation": {
         "framework": "ollama",

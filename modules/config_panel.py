@@ -292,6 +292,10 @@ class ConfigPanel(QWidget):
         self.spin_similarity.setValue(self.config.get('subtitle.similarity_threshold', 0.8))
         self.spin_similarity.valueChanged.connect(self._on_config_changed)
 
+        self.chk_translation_only = QCheckBox("仅显示译文字幕")
+        self.chk_translation_only.setChecked(self.config.get('subtitle.show_translation_only', False))
+        self.chk_translation_only.stateChanged.connect(self._on_config_changed)
+
         layout.addWidget(QLabel("最短字符数:"), 0, 0)
         layout.addWidget(self.spin_min_length, 0, 1)
         layout.addWidget(QLabel("最大间隔(秒):"), 1, 0)
@@ -300,6 +304,7 @@ class ConfigPanel(QWidget):
         layout.addWidget(self.spin_max_duration, 2, 1)
         layout.addWidget(QLabel("相似度阈值:"), 3, 0)
         layout.addWidget(self.spin_similarity, 3, 1)
+        layout.addWidget(self.chk_translation_only, 4, 0, 1, 2)
 
         group.setLayout(layout)
         return group
@@ -419,6 +424,7 @@ class ConfigPanel(QWidget):
         self.config.set('subtitle.max_gap', self.spin_max_gap.value())
         self.config.set('subtitle.max_duration', self.spin_max_duration.value())
         self.config.set('subtitle.similarity_threshold', self.spin_similarity.value())
+        self.config.set('subtitle.show_translation_only', self.chk_translation_only.isChecked())
 
         framework = "ollama" if self.combo_framework.currentIndex() == 0 else "lmstudio"
         self.config.set('translation.framework', framework)
