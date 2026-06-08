@@ -26,6 +26,7 @@
 - [项目结构](#项目结构)
 - [开发指南](#开发指南)
 - [常见问题](#常见问题)
+- [贡献](#贡献)
 - [许可证](#许可证)
 
 ---
@@ -203,11 +204,8 @@ copy config\config.example.json config\config.json
 # 方法一：使用 Python 直接运行
 python main.py
 
-# 方法二：使用启动脚本
-run.bat
-
-# 方法三：使用 VBS 脚本隐藏控制台
-启动.vbs
+# 方法二：使用启动脚本（自动检测虚拟环境和 FFmpeg）
+python 启动.py
 ```
 
 ---
@@ -337,12 +335,11 @@ run.bat
 ```
 AVT_subtitle_processor/
 ├── main.py                      # 程序入口
+├── 启动.py                      # 智能启动脚本
 ├── requirements.txt             # 项目依赖
-├── run.bat                      # 启动脚本（Windows）
 ├── build.bat                    # 打包脚本
-├── AVT_Subtitle_Processor.spec  # PyInstaller 打包配置
 ├── clean.bat                    # 清理脚本
-├── 启动.vbs                     # 隐藏控制台启动
+├── AVT_Subtitle_Processor.spec  # PyInstaller 打包配置
 │
 ├── bin/                         # FFmpeg 工具目录
 │   ├── ffmpeg.exe
@@ -356,16 +353,16 @@ AVT_subtitle_processor/
 ├── modules/                     # 核心模块
 │   ├── __init__.py
 │   ├── config_manager.py        # 配置管理
-│   ├── video_manager.py         # 视频管理
+│   ├── config_panel.py          # 配置面板
+│   ├── ffmpeg_utils.py          # FFmpeg 工具
+│   ├── log_viewer.py            # 日志查看器
+│   ├── logger.py                # 日志系统
+│   ├── main_window.py           # 主窗口
+│   ├── progress_panel.py        # 进度面板
+│   ├── security.py              # 安全工具
 │   ├── subtitle_engine.py       # 字幕处理引擎
 │   ├── translator.py            # 翻译模块
-│   ├── logger.py                # 日志系统
-│   ├── security.py              # 安全工具
-│   ├── ffmpeg_utils.py          # FFmpeg 工具
-│   ├── main_window.py           # 主窗口
-│   ├── config_panel.py          # 配置面板
-│   ├── progress_panel.py        # 进度面板
-│   └── log_viewer.py            # 日志查看器
+│   └── video_manager.py         # 视频管理
 │
 ├── tests/                       # 单元测试
 │   ├── test_config_manager.py
@@ -382,16 +379,22 @@ AVT_subtitle_processor/
 ├── logs/                        # 日志目录（自动生成）
 │   └── avt.log
 │
-├── .gitignore                   # Git 忽略文件
-├── README.md                    # 项目说明
-├── LICENSE                      # 许可证
-├── CONTRIBUTING.md              # 贡献指南
 ├── docs/                        # 文档目录
 │   ├── PaddleOCR_使用教程.md     # PaddleOCR 独立使用指南
-│   ├── 打包指南.md               # 标准化打包文档（可复用）
+│   ├── 打包指南.md               # 标准化打包文档
 │   ├── FFMPEG打包准备.md         # FFmpeg 打包说明
 │   ├── 外部依赖说明.md           # 用户端 / 开发者端依赖说明
 │   └── Cython异常排查指南.md     # Cython/CppSupport.cpp 问题排查
+│
+├── .github/                     # GitHub 配置
+│   └── workflows/               # CI/CD 工作流
+│
+├── .gitignore                   # Git 忽略文件
+├── README.md                    # 项目说明
+├── LICENSE                      # 许可证
+├── CHANGELOG.md                 # 变更日志
+├── CONTRIBUTING.md              # 贡献指南
+└── CODE_OF_CONDUCT.md           # 行为准则
 ```
 
 ---
@@ -490,7 +493,7 @@ pytest --cov=modules tests/
 - 处理速度会较慢
 - 字幕烧录可能无法使用硬件加速
 
-更多常见问题请参考 [FAQ.md](docs/FAQ.md)。
+更多帮助请参考 [docs/](docs/) 目录下的文档。
 
 ---
 
@@ -512,7 +515,7 @@ pytest --cov=modules tests/
 
 ## 贡献
 
-我们欢迎任何形式的贡献！请先阅读 [贡献指南](CONTRIBUTING.md)。
+我们欢迎任何形式的贡献！请先阅读 [贡献指南](CONTRIBUTING.md) 和 [行为准则](CODE_OF_CONDUCT.md)。
 
 ---
 
