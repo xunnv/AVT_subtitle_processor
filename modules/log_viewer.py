@@ -31,13 +31,13 @@ class LogViewer(QWidget):
         self.emitter = LogEmitter()
         self.emitter.log_signal.connect(self.append_log)
         self.log_font_size = 27
-        
+
         self._log_buffer = []
         self._html_cache = ""
         self._update_timer = QTimer()
         self._update_timer.timeout.connect(self._flush_buffer)
         self._update_timer.setInterval(100)
-        
+
         self.init_ui()
 
     def init_ui(self):
@@ -168,7 +168,7 @@ class LogViewer(QWidget):
     def _generate_html(self, message: str, level: str) -> str:
         """生成日志HTML"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        
+
         if level == self.INFO:
             color = "#c0c0c0"
             prefix = "[INFO]"
@@ -184,17 +184,17 @@ class LogViewer(QWidget):
         else:
             color = "#c0c0c0"
             prefix = ""
-        
+
         return f'<span style="color: #606060;">[{timestamp}]</span> <span style="color: {color};">{prefix} {message}</span>'
 
     def append_log(self, message: str, level: str = INFO):
         """追加日志（批量缓冲）"""
         self.mutex.lock()
-        
+
         try:
             html = self._generate_html(message, level)
             self._log_buffer.append(html)
-            
+
             if not self._update_timer.isActive():
                 self._update_timer.start()
         finally:
@@ -203,34 +203,34 @@ class LogViewer(QWidget):
     def _flush_buffer(self):
         """批量刷新日志缓冲区"""
         self.mutex.lock()
-        
+
         try:
             if not self._log_buffer:
                 self._update_timer.stop()
                 return
-            
+
             buffer_to_flush = self._log_buffer
             self._log_buffer = []
-            
+
             if not buffer_to_flush:
                 return
-            
+
             html_batch = "<br>".join(buffer_to_flush) + "<br>"
-            
+
             cursor = self.log_text.textCursor()
             cursor.movePosition(QTextCursor.End)
             cursor.insertHtml(html_batch)
-            
+
             if self.chk_auto_scroll.isChecked():
                 scrollbar = self.log_text.verticalScrollBar()
                 scrollbar.setValue(scrollbar.maximum())
-            
+
             lines = self.log_text.document().blockCount()
             self.line_count_label.setText(f"行数: {lines}")
-            
+
             if lines > self.max_lines:
                 self._trim_lines()
-                
+
         finally:
             self.mutex.unlock()
 
@@ -242,7 +242,7 @@ class LogViewer(QWidget):
         """添加错误日志并立即刷新"""
         self.log(message, self.ERROR)
         self._flush_buffer()
-    
+
     def log_success(self, message: str):
         """添加成功日志并立即刷新"""
         self.log(message, self.SUCCESS)

@@ -13,14 +13,14 @@ from .logger import logger
 
 class ConfigKeys:
     """配置键常量定义"""
-    
+
     # 路径配置
     PATH_VIDEO_INPUT = 'paths.video_input'
     PATH_OUTPUT_DIR = 'paths.output_dir'
     PATH_FFMPEG = 'paths.ffmpeg_path'
     PATH_FFPROBE = 'paths.ffprobe_path'
     PATH_PYTHON = 'paths.python_path'
-    
+
     # OCR配置
     OCR_LANG = 'ocr.lang'
     OCR_USE_GPU = 'ocr.use_gpu'
@@ -30,13 +30,13 @@ class ConfigKeys:
     OCR_REC_SCORE_THRESH = 'ocr.rec_score_thresh'
     OCR_FRAME_INTERVAL = 'ocr.frame_interval'
     OCR_FRAME_QUALITY = 'ocr.frame_quality'
-    
+
     # 字幕配置
     SUBTITLE_MIN_LENGTH = 'subtitle.min_length'
     SUBTITLE_MAX_GAP = 'subtitle.max_gap'
     SUBTITLE_MAX_DURATION = 'subtitle.max_duration'
     SUBTITLE_SIMILARITY_THRESHOLD = 'subtitle.similarity_threshold'
-    
+
     # 翻译配置
     TRANS_FRAMEWORK = 'translation.framework'
     TRANS_HOST = 'translation.host'
@@ -44,7 +44,7 @@ class ConfigKeys:
     TRANS_TIMEOUT = 'translation.timeout'
     TRANS_MAX_RETRIES = 'translation.max_retries'
     TRANS_TEMPERATURE = 'translation.temperature'
-    
+
     # ASS样式配置
     ASS_FONT_NAME = 'ass_style.font_name'
     ASS_FONT_SIZE = 'ass_style.font_size'
@@ -53,17 +53,17 @@ class ConfigKeys:
     ASS_OUTLINE_WIDTH = 'ass_style.outline_width'
     ASS_SHADOW = 'ass_style.shadow'
     ASS_MARGIN_V = 'ass_style.margin_v'
-    
+
     # 烧录配置
     BURN_PRESET = 'burn.preset'
     BURN_CRF = 'burn.crf'
-    
+
     # 处理配置
     PROCESSING_AUTO_SKIP = 'processing.auto_skip_processed'
     PROCESSING_WAIT_BETWEEN = 'processing.wait_between_videos'
     PROCESSING_CLEANUP = 'processing.cleanup_temp'
     PROCESSING_TEMP_DIR = 'processing.temp_dir'
-    
+
     # UI配置
     UI_THEME = 'ui.theme'
     UI_FONT_SIZE = 'ui.font_size'
@@ -76,7 +76,7 @@ class ConfigKeys:
 
 def get_base_dir():
     """获取程序基础目录，兼容PyInstaller打包
-    
+
     PyInstaller onedir(COLLECT)模式：sys._MEIPASS 指向 _internal/ 目录，
     所有打包的数据文件（bin/ffmpeg.exe, config模板等）都在该目录下。
     """
@@ -108,38 +108,38 @@ def get_bin_dir():
 def get_ffmpeg_path():
     """获取默认的 FFmpeg 路径，优先从 bin 目录查找（返回相对路径）"""
     base_dir = get_base_dir()
-    
+
     # 检查常规的 bin 目录
     bin_dir = os.path.join(base_dir, "bin")
     ffmpeg_path = os.path.join(bin_dir, "ffmpeg.exe")
     if os.path.exists(ffmpeg_path):
         return "./bin/ffmpeg.exe"
-    
+
     # 检查 PyInstaller 打包后的 _internal/bin 目录
     internal_bin_dir = os.path.join(base_dir, "_internal", "bin")
     ffmpeg_path = os.path.join(internal_bin_dir, "ffmpeg.exe")
     if os.path.exists(ffmpeg_path):
         return "./_internal/bin/ffmpeg.exe"
-    
+
     return "./bin/ffmpeg.exe"
 
 
 def get_ffprobe_path():
     """获取默认的 ffprobe 路径，优先从 bin 目录查找（返回相对路径）"""
     base_dir = get_base_dir()
-    
+
     # 检查常规的 bin 目录
     bin_dir = os.path.join(base_dir, "bin")
     ffprobe_path = os.path.join(bin_dir, "ffprobe.exe")
     if os.path.exists(ffprobe_path):
         return "./bin/ffprobe.exe"
-    
+
     # 检查 PyInstaller 打包后的 _internal/bin 目录
     internal_bin_dir = os.path.join(base_dir, "_internal", "bin")
     ffprobe_path = os.path.join(internal_bin_dir, "ffprobe.exe")
     if os.path.exists(ffprobe_path):
         return "./_internal/bin/ffprobe.exe"
-    
+
     return "./bin/ffprobe.exe"
 
 
@@ -241,14 +241,14 @@ class ConfigManager:
                 self.config = self.DEFAULT_CONFIG.copy()
         else:
             self.config = self.DEFAULT_CONFIG.copy()
-        
+
         self._auto_set_ffmpeg_paths()
-        
+
         if not os.path.exists(self.config_file):
             self.save()
-            
+
         return True
-    
+
     def _validate_and_fix_config(self):
         """验证配置值并修复无效值"""
         validations = [
@@ -265,7 +265,7 @@ class ConfigManager:
             (ConfigKeys.TRANS_TEMPERATURE, lambda x: 0.0 <= x <= 1.0, 0.3),
             (ConfigKeys.BURN_CRF, lambda x: 0 <= x <= 51, 23),
         ]
-        
+
         for key, validator, default in validations:
             value = self.get(key)
             try:
@@ -279,7 +279,7 @@ class ConfigManager:
     def _auto_set_ffmpeg_paths(self):
         """自动设置 FFmpeg 路径，优先从 bin 目录查找（写入相对路径）"""
         base_dir = get_base_dir()
-        
+
         # 处理 ffmpeg_path
         ffmpeg_relative = None
         bin_dir = os.path.join(base_dir, "bin")
@@ -291,12 +291,12 @@ class ConfigManager:
             temp_path = os.path.join(internal_bin_dir, "ffmpeg.exe")
             if os.path.exists(temp_path):
                 ffmpeg_relative = "./_internal/bin/ffmpeg.exe"
-        
+
         if ffmpeg_relative:
             current_path = self.config.get("paths", {}).get("ffmpeg_path", "")
             if not current_path or current_path == "ffmpeg" or os.path.isabs(current_path):
                 self.config["paths"]["ffmpeg_path"] = ffmpeg_relative
-        
+
         # 处理 ffprobe_path
         ffprobe_relative = None
         temp_path = os.path.join(bin_dir, "ffprobe.exe")
@@ -306,7 +306,7 @@ class ConfigManager:
             temp_path = os.path.join(internal_bin_dir, "ffprobe.exe")
             if os.path.exists(temp_path):
                 ffprobe_relative = "./_internal/bin/ffprobe.exe"
-        
+
         if ffprobe_relative:
             current_path = self.config.get("paths", {}).get("ffprobe_path", "")
             if not current_path or current_path == "ffprobe" or os.path.isabs(current_path):
@@ -323,21 +323,21 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"保存配置失败: {e}")
             return False
-    
+
     def reload(self) -> bool:
         """热重载配置文件"""
         old_config = self.config.copy()
         success = self.load()
-        
+
         if success:
             changed_keys = []
             for key in ['ocr', 'translation', 'ass_style', 'burn']:
                 if old_config.get(key) != self.config.get(key):
                     changed_keys.append(key)
-            
+
             if changed_keys:
                 logger.info(f"配置已热重载，以下模块配置已更新: {', '.join(changed_keys)}")
-        
+
         return success
 
     def _merge_config(self, default: Dict, loaded: Dict) -> Dict:

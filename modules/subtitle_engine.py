@@ -86,7 +86,7 @@ class SubtitleEngine:
             os.environ.get("PADDLEOCR_VENV", ""),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "paddleocr_env"),
         ]
-        
+
         venv_site = None
         for path in paddleocr_paths:
             if path:
@@ -94,10 +94,10 @@ class SubtitleEngine:
                 if os.path.isdir(site_path):
                     venv_site = site_path
                     break
-        
+
         if not venv_site:
             return
-        
+
         cuda_dirs = [
             os.path.join(venv_site, "nvidia", "cudnn", "bin"),
             os.path.join(venv_site, "nvidia", "cublas", "bin"),
@@ -132,10 +132,10 @@ class SubtitleEngine:
 
     def _resolve_tool_path(self, path_key: str, default: str = "") -> str:
         """将配置中的工具路径解析为可执行的绝对路径
-        
+
         若配置值为相对路径（如 ./bin/ffmpeg.exe），则基于程序根目录解析为绝对路径；
         若已经是绝对路径则直接返回。
-        
+
         PyInstaller onedir 模式：sys._MEIPASS 指向 _internal/，所有数据文件在此。
         """
         path = self.config.get(path_key, default)
@@ -146,23 +146,23 @@ class SubtitleEngine:
         # 相对路径：基于程序根目录解析
         from .config_manager import get_base_dir
         base_dir = get_base_dir()
-        
+
         # 开发模式下，从 sys._MEIPASS 环境变量中查找（PyInstaller 自动设置）
         _meipass = getattr(sys, '_MEIPASS', None)
         if _meipass:
             meipass_resolved = os.path.normpath(os.path.join(_meipass, path))
             if os.path.exists(meipass_resolved):
                 return meipass_resolved
-        
+
         resolved = os.path.normpath(os.path.join(base_dir, path))
         if os.path.exists(resolved):
             return resolved
-        
+
         # 降级：在 _internal/ 子目录中查找（兼容不同打包方式）
         internal_resolved = os.path.normpath(os.path.join(base_dir, '_internal', path))
         if os.path.exists(internal_resolved):
             return internal_resolved
-        
+
         return resolved
 
     def reload_translator(self):
@@ -173,7 +173,7 @@ class SubtitleEngine:
         """获取 OCR 引擎实例（单例模式，延迟初始化）"""
         if self._ocr_engine is None:
             from paddleocr import PaddleOCR
-            
+
             ocr_config = self.config.get_ocr_config()
             self._ocr_engine = PaddleOCR(
                 use_angle_cls=False,
@@ -212,7 +212,7 @@ class SubtitleEngine:
         self.cancel_requested = False
         start_time = time.time()
         video_name = Path(video_path).stem
-        
+
         logger.info(f"开始处理视频: {video_path}")
 
         ffmpeg_ok, ffmpeg_msg = self._check_ffmpeg()
@@ -231,7 +231,7 @@ class SubtitleEngine:
             if not valid:
                 logger.error(f"视频文件验证失败: {msg}")
                 return ProcessResult(False, msg)
-            
+
             output_dir = self.config.get('paths.output_dir', '')
             valid, msg = PathSecurity.validate_output_path(output_dir)
             if not valid:
@@ -338,7 +338,7 @@ class SubtitleEngine:
             if not success:
                 logger.error(f"字幕烧录失败: {error_detail}")
                 return ProcessResult(False, f"字幕烧录失败: {error_detail}")
-            
+
             logger.info(f"字幕烧录完成: {output_video}")
 
             if self.config.get('processing.cleanup_temp', True):
@@ -347,7 +347,7 @@ class SubtitleEngine:
 
             elapsed = time.time() - start_time
             logger.info(f"视频处理完成: {video_name}，耗时 {elapsed:.2f} 秒")
-            
+
             return ProcessResult(
                 True,
                 f"处理完成，耗时 {elapsed:.0f} 秒",
@@ -371,7 +371,7 @@ class SubtitleEngine:
         try:
             with open(srt_path, 'r', encoding='utf-8-sig') as f:
                 content = f.read()
-            
+
             blocks = re.split(r'\n\n+', content.strip())
             for block in blocks:
                 lines = block.strip().split('\n')
@@ -380,12 +380,12 @@ class SubtitleEngine:
                         idx = int(lines[0])
                         time_line = lines[1]
                         text_lines = lines[2:]
-                        
+
                         match = re.match(r'(\d+):(\d+):(\d+),(\d+) --> (\d+):(\d+):(\d+),(\d+)', time_line)
                         if match:
                             start = int(match.group(1)) * 3600 + int(match.group(2)) * 60 + int(match.group(3)) + int(match.group(4)) / 1000
                             end = int(match.group(5)) * 3600 + int(match.group(6)) * 60 + int(match.group(7)) + int(match.group(8)) / 1000
-                            
+
                             text = ""
                             translation = ""
                             if len(text_lines) >= 2:
@@ -393,13 +393,13 @@ class SubtitleEngine:
                                 translation = text_lines[1]
                             else:
                                 text = "\n".join(text_lines)
-                            
+
                             subtitles.append(SubtitleItem(start=start, end=end, text=text, translation=translation))
                     except Exception:
                         continue
         except Exception:
             pass
-        
+
         return subtitles
 
     def _get_video_info(self, video_path: str) -> Dict[str, Any]:
@@ -543,7 +543,7 @@ class SubtitleEngine:
         interval = self.config.get('ocr.frame_interval', 1)
 
         merged = []
-        current_text = raw_subtitles[0]['texts']
+        current_text = [t.strip() for t in raw_subtitles[0]['texts'] if t.strip()]
         current_start = raw_subtitles[0]['timestamp']
         current_end = raw_subtitles[0]['timestamp'] + interval
 
@@ -555,8 +555,16 @@ class SubtitleEngine:
 
             if similarity >= threshold and gap <= max_gap:
                 for t in item['texts']:
-                    if t not in current_text:
-                        current_text.append(t)
+                    t_clean = t.strip()
+                    if not t_clean:
+                        continue
+                    # 使用相似度去重而非精确匹配（OCR可能产生细微差异的同一文本）
+                    is_duplicate = any(
+                        self._text_similarity(existing.strip(), t_clean) >= threshold
+                        for existing in current_text
+                    )
+                    if not is_duplicate:
+                        current_text.append(t_clean)
                 current_end = item['timestamp'] + interval
             else:
                 merged.append(SubtitleItem(
@@ -564,7 +572,7 @@ class SubtitleEngine:
                     end=current_end,
                     text=" ".join(current_text)
                 ))
-                current_text = item['texts']
+                current_text = [t.strip() for t in item['texts'] if t.strip()]
                 current_start = item['timestamp']
                 current_end = item['timestamp'] + interval
 
@@ -598,7 +606,7 @@ class SubtitleEngine:
 
         untranslated = [sub for sub in subtitles if not sub.translation]
         total = len(untranslated)
-        
+
         if total == 0:
             return subtitles
 
@@ -606,7 +614,7 @@ class SubtitleEngine:
         num_batches = (total + batch_size - 1) // batch_size
         success_count = 0
         failed_count = 0
-        
+
         for batch_idx in range(0, num_batches):
             if self.cancel_requested:
                 break
@@ -617,7 +625,7 @@ class SubtitleEngine:
             texts = [sub.text for sub in batch]
 
             translations = self.translator.translate_batch(texts)
-            
+
             for sub, trans in zip(batch, translations):
                 if trans:
                     sub.translation = trans
@@ -693,7 +701,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             end = self._format_timestamp_ass(sub.end)
 
             show_translation_only = self.config.get('subtitle.show_translation_only', False)
-            
+
             if show_translation_only:
                 ass_text = sub.translation.replace("\n", " ") if sub.translation else sub.text.replace("\n", " ")
             else:
@@ -714,7 +722,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """烧录字幕到视频，返回 (成功, 错误信息)"""
         import logging
         logger = logging.getLogger(__name__)
-        
+
         ffmpeg = self._resolve_tool_path('paths.ffmpeg_path', 'ffmpeg')
         burn_config = self.config.get_burn_config()
 
@@ -733,17 +741,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         logger.info(f"视频路径: {video_path_abs}")
         logger.info(f"ASS路径: {ass_path_abs}")
         logger.info(f"输出路径: {output_path_abs}")
-        
+
         print(f"[DEBUG] 视频路径: {video_path_abs}")
         print(f"[DEBUG] ASS路径: {ass_path_abs}")
         print(f"[DEBUG] 输出路径: {output_path_abs}")
-        
+
         if not os.path.exists(video_path_abs):
             error_msg = f"视频文件不存在: {video_path_abs}"
             logger.error(error_msg)
             print(f"[ERROR] {error_msg}")
             return False, error_msg
-            
+
         if not os.path.exists(ass_path_abs):
             error_msg = f"ASS字幕文件不存在: {ass_path_abs}"
             logger.error(error_msg)
@@ -769,11 +777,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 temp_dir = os.path.join(main_output_dir, "temp")
             os.makedirs(temp_dir, exist_ok=True)
-            
+
             temp_ass = os.path.join(temp_dir, "temp_sub.ass")
             import shutil
             shutil.copy2(ass_path_abs, temp_ass)
-            
+
             ass_escaped = temp_ass.replace("\\", "/")
             if ass_escaped[1:2] == ":":
                 ass_escaped = ass_escaped[0] + "\\\\:" + ass_escaped[2:]

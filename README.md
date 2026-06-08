@@ -353,7 +353,6 @@ AVT_subtitle_processor/
 ├── modules/                     # 核心模块
 │   ├── __init__.py
 │   ├── config_manager.py        # 配置管理
-│   ├── config_panel.py          # 配置面板
 │   ├── ffmpeg_utils.py          # FFmpeg 工具
 │   ├── log_viewer.py            # 日志查看器
 │   ├── logger.py                # 日志系统

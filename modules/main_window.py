@@ -10,7 +10,8 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QSpinBox, QLabel, QGroupBox, QFormLayout,
                              QTableWidget, QTableWidgetItem, QProgressBar,
                              QStatusBar, QMessageBox, QFileDialog, QScrollArea,
-                             QAction, QMenuBar, QToolBar, QHeaderView)
+                             QAction, QMenuBar, QToolBar, QHeaderView,
+                             QCheckBox)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QFont
 
@@ -493,12 +494,12 @@ class MainWindow(QMainWindow):
 
         self.processing_thread = None
         self.current_video_index = 0
-        
+
         self._last_progress_update = 0
         self._progress_update_interval = 0.2
         self._pending_progress = None
         self._progress_timer = None
-        
+
         self._pending_logs = []
         self._last_log_update = 0
         self._log_update_interval = 0.5
@@ -509,7 +510,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         """初始化UI"""
         self.setStyleSheet(ModernStyle.get_stylesheet(27))
-        
+
         self.resize(950, 1200)
         self.setMinimumSize(800, 600)
 
@@ -700,6 +701,18 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(ass_style_group)
 
+        subtitle_cfg_group = QGroupBox("字幕整理配置")
+        subtitle_cfg_layout = QFormLayout(subtitle_cfg_group)
+        subtitle_cfg_layout.setSpacing(10)
+        self.chk_translation_only = QCheckBox("仅显示译文字幕 (烧录时隐藏原文)")
+        self.chk_translation_only.setChecked(
+            self.config_manager.get("subtitle.show_translation_only", False)
+            if self.config_manager else False
+        )
+        self.chk_translation_only.stateChanged.connect(self._on_subtitle_config_changed)
+        subtitle_cfg_layout.addRow(self.chk_translation_only)
+        layout.addWidget(subtitle_cfg_group)
+
         trans_group = QGroupBox("翻译配置")
         trans_layout = QVBoxLayout(trans_group)
         trans_layout.setSpacing(20)
@@ -810,7 +823,7 @@ class MainWindow(QMainWindow):
     def _create_progress_tab(self):
         """创建进度选项卡"""
         from PyQt5.QtWidgets import QSplitter, QScrollArea
-        
+
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -997,6 +1010,16 @@ class MainWindow(QMainWindow):
         self.config_manager.set("ass_style.margin_v", margin_v)
         self.config_manager.save()
 
+    def _on_subtitle_config_changed(self):
+        """字幕整理配置改变"""
+        if not self.config_manager:
+            return
+        self.config_manager.set(
+            "subtitle.show_translation_only",
+            self.chk_translation_only.isChecked()
+        )
+        self.config_manager.save()
+
     def _test_translation_connection(self):
         """测试翻译连接"""
         from modules.translator import TranslatorFactory
@@ -1104,28 +1127,28 @@ class MainWindow(QMainWindow):
     def _on_progress_updated(self, step, total, progress, message, eta=""):
         """进度更新（带节流机制）"""
         current_time = time.time()
-        
+
         if current_time - self._last_progress_update < self._progress_update_interval:
             self._pending_progress = (step, total, progress, message, eta)
             return
-        
+
         self._last_progress_update = current_time
         self._do_update_progress(step, total, progress, message, eta)
-    
+
     def _do_update_progress(self, step, total, progress, message, eta=""):
         """执行进度更新"""
         if hasattr(self, 'overall_progress') and self.overall_progress:
             self.overall_progress.setValue(int(progress * 100))
-        
+
         if hasattr(self, 'current_stage_label') and self.current_stage_label:
             self.current_stage_label.setText(message)
-        
+
         if hasattr(self, 'progress_detail_label') and self.progress_detail_label:
             self.progress_detail_label.setText(f"{step} / {total}")
-        
+
         if hasattr(self, 'estimated_time_label') and self.estimated_time_label:
             self.estimated_time_label.setText(eta if eta else "--")
-        
+
         if self.log_viewer and message:
             self.log_viewer.log(message, LogViewer.INFO)
 
@@ -1136,7 +1159,7 @@ class MainWindow(QMainWindow):
             step, total, progress, msg, eta = self._pending_progress
             self._do_update_progress(step, total, progress, msg, eta)
             self._pending_progress = None
-            
+
         videos = self.video_manager.get_videos()
         if self.current_video_index < len(videos):
             video = videos[self.current_video_index]
@@ -1211,6 +1234,11 @@ class MainWindow(QMainWindow):
         if self.spin_margin_v:
             self.spin_margin_v.setValue(ass_style.get("margin_v", 30))
 
+        if hasattr(self, 'chk_translation_only') and self.chk_translation_only:
+            self.chk_translation_only.setChecked(
+                self.config_manager.get("subtitle.show_translation_only", False)
+            )
+
         if self.log_viewer:
             self.log_viewer.set_font_size(27)
 
@@ -1256,6 +1284,9 @@ class MainWindow(QMainWindow):
             self.config_manager.set("ass_style.outline_width", self.spin_outline_width.value())
         if self.spin_margin_v:
             self.config_manager.set("ass_style.margin_v", self.spin_margin_v.value())
+
+        if hasattr(self, 'chk_translation_only') and self.chk_translation_only:
+            self.config_manager.set("subtitle.show_translation_only", self.chk_translation_only.isChecked())
 
         framework = "ollama" if self.combo_framework.currentIndex() == 0 else "lmstudio"
 

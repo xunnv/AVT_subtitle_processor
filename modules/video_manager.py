@@ -119,7 +119,7 @@ class VideoManager:
 
         videos = [self._create_video_info(path) for path in video_files]
         self.videos = self._sort_videos(videos, sort_by, reverse)
-    
+
     def _sort_videos(self, videos: list, sort_by: str = 'name', reverse: bool = False) -> list:
         """排序视频列表"""
         sort_key_map = {
@@ -128,14 +128,14 @@ class VideoManager:
             'mtime': lambda v: v.mtime,
             'ctime': lambda v: v.ctime
         }
-        
+
         sort_key = sort_key_map.get(sort_by, lambda v: v.name.lower())
         return sorted(videos, key=sort_key, reverse=reverse)
-    
+
     def sort_videos(self, sort_by: str = 'name', reverse: bool = False):
         """排序现有视频列表"""
         self.videos = self._sort_videos(self.videos, sort_by, reverse)
-    
+
     def rescan(self, sort_by: str = 'name', reverse: bool = False):
         """重新扫描目录"""
         self._scan_directory(sort_by, reverse)

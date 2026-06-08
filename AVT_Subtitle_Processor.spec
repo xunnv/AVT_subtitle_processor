@@ -155,7 +155,7 @@ if os.path.isdir(config_dir):
     for fname in os.listdir(config_dir):
         fpath = os.path.join(config_dir, fname)
         if os.path.isfile(fpath):
-            DATAS.append((fpath, os.path.join('config', fname)))
+            DATAS.append((fpath, 'config'))
 
 # bin 目录（FFmpeg）— 逐个添加文件确保被收集
 bin_dir = os.path.join(PROJECT_ROOT, 'bin')
@@ -163,7 +163,17 @@ if os.path.isdir(bin_dir):
     for fname in os.listdir(bin_dir):
         fpath = os.path.join(bin_dir, fname)
         if os.path.isfile(fpath):
-            DATAS.append((fpath, os.path.join('bin', fname)))
+            DATAS.append((fpath, 'bin'))
+
+# modules 目录 — 显式复制确保最新源码被包含
+# PyInstaller DATAS 格式: (source_path, dest_dir_in_bundle)
+modules_dir = os.path.join(PROJECT_ROOT, 'modules')
+if os.path.isdir(modules_dir):
+    for fname in os.listdir(modules_dir):
+        fpath = os.path.join(modules_dir, fname)
+        if os.path.isfile(fpath) and fname.endswith('.py'):
+            # dest 应该是目录名，不是文件路径
+            DATAS.append((fpath, 'modules'))
 
 # ============================================================
 # 二进制文件收集（NVIDIA CUDA DLL）
@@ -330,8 +340,25 @@ if os.path.isdir(cython_utility_src):
 nvidia_src = os.path.join(VENV_SITE, 'nvidia')
 if os.path.isdir(nvidia_src):
     nvidia_dst = os.path.join(dist_dir, 'nvidia')
-    print("[SPEC] 复制 nvidia/ CUDA 库...")
-    copy_dir_tree(nvidia_src, nvidia_dst)
+    print("[SPEC] 复制 nvidia/ CUDA 库（排除开发文件: .lib, .h, .hpp, .alt.dll, .pdb）...")
+    for root, dirs, files in os.walk(nvidia_src):
+        # 跳过 __pycache__
+        if '__pycache__' in dirs:
+            dirs.remove('__pycache__')
+        rel_path = os.path.relpath(root, nvidia_src)
+        if rel_path == '.':
+            dst_root = nvidia_dst
+        else:
+            dst_root = os.path.join(nvidia_dst, rel_path)
+        os.makedirs(dst_root, exist_ok=True)
+        for f in files:
+            # 排除开发文件: 静态库(.lib), 头文件(.h/.hpp), pdb, .alt.dll
+            if f.endswith(('.lib', '.h', '.hpp', '.pdb')):
+                continue
+            if f.endswith('.alt.dll'):
+                print(f"[SPEC]  排除 .alt.dll: {rel_path}/{f}")
+                continue
+            shutil.copy2(os.path.join(root, f), os.path.join(dst_root, f))
     print("[SPEC] nvidia/ 完成")
 
 # 4. 复制 docx 模块

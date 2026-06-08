@@ -97,26 +97,26 @@ class OllamaTranslator(BaseTranslator):
         """批量翻译多个文本（使用异步并发）"""
         if not texts:
             return []
-        
+
         logger.info(f"开始批量翻译 {len(texts)} 条文本")
         start_time = time.time()
-        
+
         try:
             results = asyncio.run(self._async_translate_batch(texts, source_lang, target_lang))
         except Exception as e:
             logger.exception(f"批量翻译异步执行失败: {e}")
             results = [self.translate(t, source_lang, target_lang) for t in texts]
-        
+
         elapsed = time.time() - start_time
         success_count = sum(1 for r in results if r is not None)
         logger.info(f"批量翻译完成: {success_count}/{len(texts)} 成功，耗时 {elapsed:.2f} 秒")
-        
+
         return results
-    
+
     async def _async_translate_batch(self, texts: List[str], source_lang: str, target_lang: str) -> List[Optional[str]]:
         """异步批量翻译"""
         semaphore = asyncio.Semaphore(3)
-        
+
         async def translate_with_limit(text: str, index: int):
             async with semaphore:
                 for attempt in range(self.max_retries):
@@ -149,14 +149,14 @@ class OllamaTranslator(BaseTranslator):
                             continue
                         return index, None
                 return index, None
-        
+
         tasks = [translate_with_limit(text, i) for i, text in enumerate(texts)]
         results = await asyncio.gather(*tasks)
-        
+
         sorted_results = [None] * len(texts)
         for index, translated in results:
             sorted_results[index] = translated
-        
+
         return sorted_results
 
     def _build_prompt(self, text: str, source_lang: str, target_lang: str) -> str:
@@ -259,26 +259,26 @@ class LMStudioTranslator(BaseTranslator):
         """批量翻译多个文本（使用异步并发）"""
         if not texts:
             return []
-        
+
         logger.info(f"开始批量翻译 {len(texts)} 条文本")
         start_time = time.time()
-        
+
         try:
             results = asyncio.run(self._async_translate_batch(texts, source_lang, target_lang))
         except Exception as e:
             logger.exception(f"批量翻译异步执行失败: {e}")
             results = [self.translate(t, source_lang, target_lang) for t in texts]
-        
+
         elapsed = time.time() - start_time
         success_count = sum(1 for r in results if r is not None)
         logger.info(f"批量翻译完成: {success_count}/{len(texts)} 成功，耗时 {elapsed:.2f} 秒")
-        
+
         return results
-    
+
     async def _async_translate_batch(self, texts: List[str], source_lang: str, target_lang: str) -> List[Optional[str]]:
         """异步批量翻译"""
         semaphore = asyncio.Semaphore(3)
-        
+
         async def translate_with_limit(text: str, index: int):
             async with semaphore:
                 for attempt in range(self.max_retries):
@@ -310,14 +310,14 @@ class LMStudioTranslator(BaseTranslator):
                             continue
                         return index, None
                 return index, None
-        
+
         tasks = [translate_with_limit(text, i) for i, text in enumerate(texts)]
         results = await asyncio.gather(*tasks)
-        
+
         sorted_results = [None] * len(texts)
         for index, translated in results:
             sorted_results[index] = translated
-        
+
         return sorted_results
 
     def _build_prompt(self, text: str, source_lang: str, target_lang: str) -> str:

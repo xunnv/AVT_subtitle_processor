@@ -13,7 +13,7 @@ def setup_nvidia_path():
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
         nvidia_base = os.path.join(base_dir, '_internal', 'nvidia')
-        
+
         nvidia_bins = [
             os.path.join(nvidia_base, 'cublas', 'bin'),
             os.path.join(nvidia_base, 'cuda_runtime', 'bin'),
@@ -24,14 +24,14 @@ def setup_nvidia_path():
             os.path.join(nvidia_base, 'cusparse', 'bin'),
             os.path.join(nvidia_base, 'nvjitlink', 'bin'),
         ]
-        
+
         current_path = os.environ.get('PATH', '')
         paths_to_add = []
-        
+
         for bin_path in nvidia_bins:
             if os.path.exists(bin_path) and bin_path not in current_path:
                 paths_to_add.append(bin_path)
-        
+
         if paths_to_add:
             new_path = ';'.join(paths_to_add) + ';' + current_path
             os.environ['PATH'] = new_path
@@ -41,7 +41,7 @@ def check_vc_redist():
     """检查 Microsoft Visual C++ Redistributable 是否安装"""
     if sys.platform != 'win32':
         return True
-    
+
     # 检查 VC++ 2015-2022 Redistributable (x64)
     required_dlls = [
         'vcruntime140.dll',
@@ -50,14 +50,14 @@ def check_vc_redist():
         'msvcp140_1.dll',
         'msvcp140_2.dll',
     ]
-    
+
     missing_dlls = []
     for dll in required_dlls:
         try:
             ctypes.CDLL(dll)
         except OSError:
             missing_dlls.append(dll)
-    
+
     if missing_dlls:
         return False, missing_dlls
     return True, None
@@ -97,7 +97,7 @@ class AVTApplication:
     def __init__(self):
         # 首先检查 VC++ 运行时
         self._check_vc_redist()
-        
+
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("AVT字幕处理器")
         self.app.setApplicationVersion("1.0.0")
@@ -109,13 +109,13 @@ class AVTApplication:
         self.config_manager = ConfigManager(config_dir)
         self.video_manager = VideoManager(self.config_manager)
         self.engine = SubtitleEngine(self.config_manager)
-        
+
         # 设置UI字体
         self._setup_ui_font()
-        
+
         # 创建主窗口
         self._create_main_window()
-    
+
     def _check_vc_redist(self):
         """检查 VC++ 运行时库"""
         installed, missing = check_vc_redist()
@@ -127,23 +127,23 @@ class AVTApplication:
                 "下载地址: https://aka.ms/vs/17/release/vc_redist.x64.exe"
             )
             print(error_msg)
-            
+
             # 尝试显示错误消息框（即使还没初始化完整）
             try:
                 temp_app = QApplication(sys.argv)
                 QMessageBox.critical(None, "运行时错误", error_msg)
             except:
                 pass
-            
+
             sys.exit(1)
-    
+
     def _setup_ui_font(self):
         """设置UI字体"""
         ui_font_size = 27
         font = QFont("Microsoft YaHei", ui_font_size)
         font.setPointSizeF(ui_font_size)
         self.app.setFont(font)
-    
+
     def _create_main_window(self):
         """创建主窗口"""
         self.main_window = MainWindow()
@@ -190,7 +190,7 @@ def except_hook(exc_type, exc_value, exc_traceback):
 def main():
     """主函数"""
     sys.excepthook = except_hook
-    
+
     # 设置 NVIDIA CUDA 运行时库路径（必须在导入 paddle 之前调用）
     setup_nvidia_path()
 
